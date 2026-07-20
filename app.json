@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Drissman",
+    "slug": "drissman",
+    "version": "1.0.0",
+    "icon": "./assets/auto-ecole.png",
+    "newArchEnabled": true,
+    "main": "App.js",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0F1E"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "cm.drissman.app"
+    },
+    "android": {
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/auto-ecole.png",
+        "backgroundColor": "#0A0F1E"
+      },
+      "package": "cm.drissman.app"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      "@react-native-google-signin/google-signin",
+      "expo-localization",
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ],
+    "scheme": "drissman",
+    "extra": {
+      "apiUrl": "http://10.210.97.63:8080",
+      "useMock": false,
+      "eas": {
+        "projectId": "04206e1b-ea5f-465a-8580-80e624cca5e2"
+      }
+    }
+  }
+}
