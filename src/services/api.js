@@ -4,7 +4,35 @@ import * as SecureStore from 'expo-secure-store'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import NetInfo from '@react-native-community/netinfo'
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080'
+import Constants from 'expo-constants'
+import * as Device from 'expo-device'
+import { Platform } from 'react-native'
+
+const LOCAL_LAN_IP = '172.18.204.63'
+
+const getDynamicBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL
+  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
+    return envUrl
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost
+  if (hostUri) {
+    const hostIp = hostUri.split(':')[0]
+    if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
+      return `http://${hostIp}:8080`
+    }
+  }
+
+  if (Platform.OS === 'android' && !Device.isDevice) {
+    return 'http://10.0.2.2:8080'
+  }
+
+  return `http://${LOCAL_LAN_IP}:8080`
+}
+
+const BASE_URL = getDynamicBaseUrl()
+console.log("🔗 L'URL de l'API utilisée par l'application est :", BASE_URL)
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -24,8 +52,15 @@ api.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`
     }
 
+    const targetUrl = config.baseURL || BASE_URL
+    const isLocalServer = targetUrl.includes('localhost') || 
+                          targetUrl.includes('127.0.0.1') || 
+                          targetUrl.includes('10.0.2.2') || 
+                          targetUrl.includes('172.18.') || 
+                          targetUrl.includes('192.168.')
+
     const netInfo = await NetInfo.fetch()
-    const isOffline = !(netInfo.isConnected && netInfo.isInternetReachable !== false)
+    const isOffline = !netInfo.isConnected && !isLocalServer
 
     if (isOffline) {
       if (config.method.toLowerCase() === 'get') {

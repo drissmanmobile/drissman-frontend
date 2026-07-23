@@ -1,6 +1,7 @@
 // src/screens/auth/LoginScreen.js
 import { useTheme } from '../../context/ThemeContext'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
@@ -17,7 +18,7 @@ import { signInWithGoogle } from '../../services/googleAuth'
 import { useTranslation } from 'react-i18next'
 
 const schema = z.object({
-  email: z.string().email('Email invalide'),
+  email: z.string().min(3, 'Identifiant requis (min 3 caractères)'),
   password: z.string().min(6, 'Minimum 6 caractères'),
 })
 
@@ -44,15 +45,30 @@ export default function LoginScreen({ navigation }) {
     }
   }
 
-  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+  const { control, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { email: '', password: '' },
   })
+
+  useEffect(() => {
+    async function loadLastEmail() {
+      try {
+        const storedEmail = await AsyncStorage.getItem('last_email')
+        if (storedEmail) {
+          setValue('email', storedEmail)
+        }
+      } catch (e) {}
+    }
+    loadLastEmail()
+  }, [setValue])
 
   async function onSubmit({ email, password }) {
     setServerError('')
     try {
       await login(email, password)
+      try {
+        await AsyncStorage.setItem('last_email', email)
+      } catch (e) {}
       // La navigation se fait automatiquement via AppNavigator
     } catch (err) {
       setServerError(err.message || t('auth.invalid_credentials'))
@@ -77,7 +93,7 @@ export default function LoginScreen({ navigation }) {
         {/* Formulaire */}
         <View style={styles.form}>
 
-          {/* Email */}
+          {/* Email / Username */}
           <View style={styles.field}>
             <Text style={styles.label}>{t('auth.email_label')}</Text>
             <Controller
@@ -91,7 +107,7 @@ export default function LoginScreen({ navigation }) {
                   onChangeText={onChange}
                   onBlur={onBlur}
                   value={value}
-                  keyboardType="email-address"
+                  keyboardType="default"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />

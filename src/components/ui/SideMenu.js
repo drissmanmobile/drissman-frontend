@@ -31,7 +31,11 @@ export default function SideMenu() {
 
   const navigateTo = (screen) => {
     closeMenu();
-    navigation.navigate(screen);
+    if (typeof screen === 'string') {
+      navigation.navigate(screen);
+    } else if (screen && screen.name) {
+      navigation.navigate(screen.name, screen.params);
+    }
   };
 
   const renderMenuItems = () => {

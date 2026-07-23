@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "756146333424",
+    "project_id": "drissman-680c4",
+    "storage_bucket": "drissman-680c4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:756146333424:android:960b2449f015d8d20bc435",
+        "android_client_info": {
+          "package_name": "cm.drissman.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "756146333424-03t1jigdf930gksi3jcojpgn2u5cg64s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDudlAUDK3wmPvG1Dqd64V5H-GudSSNjfs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "756146333424-03t1jigdf930gksi3jcojpgn2u5cg64s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

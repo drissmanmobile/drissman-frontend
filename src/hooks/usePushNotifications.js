@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import api from '../services/api';
+import Constants from 'expo-constants';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -25,13 +26,13 @@ export function usePushNotifications(isAuthenticated) {
         setDevicePushToken(tokenData.deviceToken);
         if (tokenData.deviceToken && isAuthenticated) {
           try {
-             await api.post('/notifications/register-token', {
+             await api.post('/api/notifications/register-token', {
                  token: tokenData.deviceToken,
                  platform: Platform.OS,
              });
              console.log("Token successfully registered on backend.");
           } catch (error) {
-             console.error("Failed to register push token on backend:", error);
+             console.log("Push token registration unavailable (offline/mock mode):", error?.message || error);
           }
         }
       }
@@ -80,13 +81,12 @@ async function registerForPushNotificationsAsync() {
     }
     
     try {
-        // Pour Firebase Cloud Messaging en direct (FCM), on utilise le device push token
-        const token = (await Notifications.getDevicePushTokenAsync()).data;
+        const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? '04206e1b-ea5f-465a-8580-80e624cca5e2';
+        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
         deviceToken = token;
-        console.log("Device Push Token:", deviceToken);
+        console.log("Expo Push Token:", deviceToken);
     } catch (e) {
-        // Ignorer l'erreur d'initialisation de Firebase pour le moment
-        // console.log("Erreur lors de la récupération du Device Push Token:", e);
+        console.log("Erreur lors de la récupération du Expo Push Token:", e);
     }
     
   } else {

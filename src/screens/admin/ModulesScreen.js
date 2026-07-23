@@ -11,14 +11,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Linking
+  Linking,
+  TextInput
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { Modal, EmptyState, Badge } from '../../components/ui/index'
 import * as DocumentPicker from 'expo-document-picker'
-import { getAdminModules, getModuleDocuments, uploadDocument } from '../../services/services'
+import { getAdminModules, getModuleDocuments, uploadDocument, createAdminModule, updateAdminModule, deleteAdminModule } from '../../services/services'
 import { Ionicons } from '@expo/vector-icons'
 
 
@@ -35,6 +36,15 @@ export default function AdminModulesScreen({ navigation }) {
   const [documents, setDocuments] = useState([])
   const [docsLoading, setDocsLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // Module CRUD state
+  const [moduleModalVisible, setModuleModalVisible] = useState(false)
+  const [editingModule, setEditingModule] = useState(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('THEORY')
+  const [requiredHours, setRequiredHours] = useState('1')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     loadModules()
@@ -103,6 +113,74 @@ export default function AdminModulesScreen({ navigation }) {
     }
   }
 
+  function openCreateModal() {
+    setEditingModule(null)
+    setName('')
+    setDescription('')
+    setCategory('THEORY')
+    setRequiredHours('1')
+    setModuleModalVisible(true)
+  }
+
+  function openEditModal(mod) {
+    setEditingModule(mod)
+    setName(mod.name)
+    setDescription(mod.description)
+    setCategory(mod.category)
+    setRequiredHours(mod.requiredHours?.toString() || '1')
+    setModuleModalVisible(true)
+  }
+
+  async function handleSaveModule() {
+    if (!name.trim() || !requiredHours.trim()) {
+      Alert.alert(t('schools.err_title', 'Erreur'), 'Veuillez remplir les champs obligatoires.')
+      return
+    }
+    
+    try {
+      setSaving(true)
+      const payload = {
+        name,
+        description,
+        category,
+        requiredHours: parseInt(requiredHours, 10) || 1
+      }
+      
+      if (editingModule) {
+        await updateAdminModule(editingModule.id, payload)
+        Alert.alert(t('schools.success_title', 'Succès'), 'Module mis à jour.')
+      } else {
+        await createAdminModule(payload)
+        Alert.alert(t('schools.success_title', 'Succès'), 'Module créé.')
+      }
+      setModuleModalVisible(false)
+      loadModules()
+    } catch (err) {
+      Alert.alert(t('schools.err_title', 'Erreur'), 'Impossible de sauvegarder le module.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleDeleteModule(id) {
+    Alert.alert('Supprimer', 'Voulez-vous vraiment supprimer ce module ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAdminModule(id)
+            Alert.alert(t('schools.success_title', 'Succès'), 'Module supprimé.')
+            loadModules()
+          } catch (err) {
+            Alert.alert(t('schools.err_title', 'Erreur'), 'Impossible de supprimer ce module.')
+          }
+        },
+      },
+    ])
+  }
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
@@ -113,6 +191,11 @@ export default function AdminModulesScreen({ navigation }) {
         </View>
         <Text style={styles.title}>{t('admin_modules.title')}</Text>
         <Text style={styles.subtitle}>{t('admin_modules.subtitle')}</Text>
+        
+        <TouchableOpacity onPress={openCreateModal} style={styles.headerAddBtn}>
+          <Ionicons name="add" size={20} color={themeColors.textOnPrimary} />
+          <Text style={styles.headerAddBtnText}>Ajouter</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -134,10 +217,17 @@ export default function AdminModulesScreen({ navigation }) {
                   {item.requiredHours} {t('admin_modules.hours_req')}
                 </Text>
               </View>
-              
-              <TouchableOpacity onPress={() => handleViewDocuments(item)} style={styles.docsBtn}>
-                <Text style={styles.docsBtnText}><Ionicons name="folder-outline" size={14} color={themeColors.primary} /> {t('admin_modules.btn_docs')}</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <TouchableOpacity onPress={() => handleViewDocuments(item)} style={[styles.docsBtn, { flex: 1 }]}>
+                  <Text style={styles.docsBtnText}><Ionicons name="folder-outline" size={14} color={themeColors.primary} /> {t('admin_modules.btn_docs')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editBtn}>
+                  <Ionicons name="pencil" size={18} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteModule(item.id)} style={styles.deleteBtn}>
+                  <Ionicons name="trash" size={18} color={themeColors.error} />
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           ListEmptyComponent={<EmptyState message={t('admin_modules.empty')} icon={<Ionicons name="book-outline" size={48} color={themeColors.textSecondary} />} />}
@@ -188,24 +278,59 @@ export default function AdminModulesScreen({ navigation }) {
           </View>
         )}
       </Modal>
+
+      {/* Modal for Creating/Editing Module */}
+      <Modal
+        isVisible={moduleModalVisible}
+        onClose={() => setModuleModalVisible(false)}
+        title={editingModule ? 'Modifier le Module' : 'Créer un Module'}
+      >
+        <ScrollView style={{ maxHeight: 400 }}>
+          <Text style={styles.label}>Nom du module *</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Ex: Code de la Route" />
+
+          <Text style={styles.label}>Description</Text>
+          <TextInput value={description} onChangeText={setDescription} style={[styles.input, { height: 60 }]} placeholder="Détails du module..." multiline />
+
+          <Text style={styles.label}>Catégorie</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            <TouchableOpacity onPress={() => setCategory('THEORY')} style={[styles.chip, category === 'THEORY' && styles.chipActive]}>
+              <Text style={[styles.chipText, category === 'THEORY' && styles.chipTextActive]}>Théorie</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setCategory('PRACTICAL')} style={[styles.chip, category === 'PRACTICAL' && styles.chipActive]}>
+              <Text style={[styles.chipText, category === 'PRACTICAL' && styles.chipTextActive]}>Pratique</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Heures Requises *</Text>
+          <TextInput value={requiredHours} onChangeText={setRequiredHours} keyboardType="numeric" style={styles.input} placeholder="Ex: 20" />
+
+          <TouchableOpacity onPress={handleSaveModule} style={[styles.uploadBtn, { marginTop: 24, opacity: saving ? 0.7 : 1 }]} disabled={saving}>
+            <Text style={styles.uploadBtnText}>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </Modal>
     </SafeAreaView>
   )
 }
 
 const getStyles = (themeColors) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: themeColors.background },
-  header: { backgroundColor: themeColors.dark, padding: Spacing.lg, paddingBottom: 20 },
+  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: { backgroundColor: '#F9FAFB', padding: Spacing.lg, paddingBottom: 16 },
   headerTop: { flexDirection: 'row', marginBottom: 12 },
   backBtn: { padding: 4 },
   backBtnText: { color: themeColors.primary, fontWeight: '600', fontSize: 16 },
-  title: { ...Typography.h2, color: themeColors.textWhite, marginBottom: 4 },
-  subtitle: { ...Typography.body, color: '#9CA3AF' },
+  title: { ...Typography.h2, color: themeColors.textPrimary, marginBottom: 4 },
+  subtitle: { ...Typography.body, color: themeColors.textSecondary },
   list: { padding: Spacing.md },
   card: { 
-    backgroundColor: themeColors.surface, 
-    borderRadius: Radius.lg, 
+    backgroundColor: '#FFF', 
+    borderRadius: Radius.xl, 
     padding: Spacing.md, 
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: themeColors.borderLight || '#F3F4F6',
+    ...Shadows.sm,
   },
   cardContent: { marginBottom: 12 },
   moduleName: { ...Typography.h3, color: themeColors.textPrimary, marginBottom: 2 },
@@ -213,10 +338,10 @@ const getStyles = (themeColors) => StyleSheet.create({
   moduleDesc: { ...Typography.bodyMedium, color: themeColors.textSecondary, marginBottom: 8 },
   moduleMeta: { ...Typography.caption, color: themeColors.textMuted },
   docsBtn: { 
-    backgroundColor: themeColors.surface, 
+    backgroundColor: '#FFF', 
     borderWidth: 1, 
-    borderColor: themeColors.border, 
-    borderRadius: Radius.md, 
+    borderColor: themeColors.borderLight || '#E5E7EB', 
+    borderRadius: Radius.lg, 
     paddingVertical: 10, 
     alignItems: 'center' 
   },
@@ -244,4 +369,14 @@ const getStyles = (themeColors) => StyleSheet.create({
   docInfo: { flex: 1 },
   docName: { ...Typography.bodyMedium, color: themeColors.textPrimary, fontWeight: '500' },
   docDate: { ...Typography.caption, color: themeColors.textMuted, marginTop: 2 },
+  headerAddBtn: { position: 'absolute', right: Spacing.lg, bottom: 20, backgroundColor: themeColors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.full },
+  headerAddBtnText: { color: themeColors.textOnPrimary, fontWeight: '600', marginLeft: 4, fontSize: 13 },
+  editBtn: { padding: 10, backgroundColor: themeColors.surface, borderWidth: 1, borderColor: themeColors.border, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { padding: 10, backgroundColor: themeColors.errorLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  label: { ...Typography.smallMedium, color: themeColors.textPrimary, marginTop: 12, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: themeColors.border, borderRadius: Radius.sm, padding: 10, backgroundColor: themeColors.surface, fontSize: 14, color: themeColors.textPrimary },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full, backgroundColor: themeColors.surface, borderWidth: 1, borderColor: themeColors.border },
+  chipActive: { backgroundColor: themeColors.primary, borderColor: themeColors.primary },
+  chipText: { fontSize: 13, color: themeColors.textSecondary },
+  chipTextActive: { color: themeColors.textOnPrimary, fontWeight: '700' },
 })

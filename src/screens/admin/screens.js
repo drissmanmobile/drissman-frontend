@@ -1,6 +1,6 @@
 // src/screens/admin/screens.js
 import { useTheme } from '../../context/ThemeContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Platform } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import {
@@ -24,11 +24,12 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../../context/AuthContext'
 import { useSideMenu } from '../../context/SideMenuContext'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { updateProfile } from '../../services/auth.service'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { formatDate, formatTime, formatPrice } from '../../utils/formatters'
 import { Badge, Modal, Button, EmptyState } from '../../components/ui/index'
+import LiveSessionTrackingModal from '../../components/session/LiveSessionTrackingModal'
 import {
   getAdminDashboard,
   getAdminOffers,
@@ -42,6 +43,7 @@ import {
   getAdminAvailableOffers,
   getAdminAvailableEnrollments,
   getAdminEnrollments,
+  updateAdminEnrollmentStatus,
   scheduleAdminSession,
   getAdminModules,
   getAdminSchoolProfile,
@@ -81,6 +83,7 @@ export default function AdminDashboardScreen({ navigation }) {
   const { openMenu } = useSideMenu()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [trackingSession, setTrackingSession] = useState(null)
   
   // School Documents State
   const [documents, setDocuments] = useState([])
@@ -93,12 +96,20 @@ export default function AdminDashboardScreen({ navigation }) {
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [expandedOffer, setExpandedOffer] = useState(null)
 
-  useEffect(() => {
-    loadDashboard()
-    if (user?.schoolId) {
-      loadSchoolDocuments(user.schoolId)
-    }
-  }, [user])
+  // Pending Enrollments State
+  const [pendingModalVisible, setPendingModalVisible] = useState(false)
+  const [pendingEnrollments, setPendingEnrollments] = useState([])
+  const [loadingPending, setLoadingPending] = useState(false)
+  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard()
+      if (user?.schoolId) {
+        loadSchoolDocuments(user.schoolId)
+      }
+    }, [user])
+  )
 
   async function loadDashboard() {
     try {
@@ -158,6 +169,36 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   }
 
+  async function handleOpenPendingEnrollments() {
+    setPendingModalVisible(true)
+    setLoadingPending(true)
+    try {
+      const enrollments = await getAdminEnrollments()
+      const pending = enrollments.filter(e => e.status === 'PENDING')
+      setPendingEnrollments(pending)
+    } catch (err) {
+      Alert.alert(t('schools.err_title', 'Erreur'), "Impossible de charger les inscriptions en attente")
+    } finally {
+      setLoadingPending(false)
+    }
+  }
+
+  async function handleUpdateEnrollmentStatus(enrollmentId, newStatus) {
+    try {
+      setUpdatingEnrollmentId(enrollmentId)
+      await updateAdminEnrollmentStatus(enrollmentId, newStatus)
+      // Remove from list
+      setPendingEnrollments(prev => prev.filter(e => e.id !== enrollmentId))
+      // Refresh dashboard stats
+      loadDashboard()
+      Alert.alert(t('schools.success_title', 'Succès'), newStatus === 'ACTIVE' ? "Inscription acceptée" : "Inscription refusée")
+    } catch (err) {
+      Alert.alert(t('schools.err_title', 'Erreur'), err.message || "Une erreur est survenue")
+    } finally {
+      setUpdatingEnrollmentId(null)
+    }
+  }
+
   async function handleUploadDocument() {
     if (!user?.schoolId) return
     
@@ -201,114 +242,228 @@ export default function AdminDashboardScreen({ navigation }) {
     )
   }
 
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  const ADMIN_TILES = [
+    { id: 'offers', title: 'Offres', icon: 'cube-outline', bgColor: '#E0E7FF', iconColor: '#4F46E5', route: 'AdminOffers' },
+    { id: 'monitors', title: 'Moniteurs', icon: 'people-outline', bgColor: '#DCFCE7', iconColor: '#16A34A', route: 'AdminInstructors' },
+    { id: 'enrollments', title: 'Inscriptions', icon: 'school-outline', bgColor: '#FCE7F3', iconColor: '#DB2777', action: handleOpenPendingEnrollments },
+    { id: 'planning', title: 'Planning', icon: 'calendar-outline', bgColor: '#FEF3C7', iconColor: '#D97706', route: 'AdminPlanning' },
+    { id: 'modules', title: 'Modules', icon: 'book-outline', bgColor: '#F3E8FF', iconColor: '#9333EA', route: 'AdminModules' },
+    { id: 'vehicles', title: 'Flotte auto', icon: 'car-outline', bgColor: '#FFEDD5', iconColor: '#EA580C', route: 'AdminVehicles' },
+    { id: 'docs', title: 'Fichiers', icon: 'document-text-outline', bgColor: '#CFFAFE', iconColor: '#0891B2', action: handleUploadDocument },
+    { id: 'school', title: 'Profil école', icon: 'business-outline', bgColor: '#CCFBF1', iconColor: '#0D9488', route: 'AdminProfile' },
+  ]
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      {/* En-tête Style Moniteur */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={openMenu} style={{ marginRight: Spacing.md }}>
-            <Ionicons name="menu" size={32} color={themeColors.textWhite} />
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={openMenu} style={styles.menuButton}>
+            <Ionicons name="menu" size={28} color={themeColors.textPrimary} />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.title}>{t('admin_dashboard.title')}</Text>
-            <Text style={styles.subtitle}>{t('admin_dashboard.welcome', { name: user?.firstName })}</Text>
-          </View>
+          <TouchableOpacity onPress={handleOpenPendingEnrollments} style={styles.notificationBtn}>
+            <Ionicons name="notifications-outline" size={24} color={themeColors.textPrimary} />
+            {stats?.pendingValidations > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{stats.pendingValidations > 9 ? '9+' : stats.pendingValidations}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+        <View style={styles.greetingContainer}>
+          <Text style={styles.greetingText}>Bonjour,</Text>
+          <Text style={styles.userName}>{user?.firstName || 'Admin'} 👋</Text>
+          <Text style={styles.userRole}>Administrateur - Auto-école</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.statsGrid}>
-          <StatCard label={t('admin_dashboard.active_students')} value={stats?.activeCandidates ?? 0} icon={<Ionicons name="school" size={28} color={themeColors.info} />} color={themeColors.info} onPress={handleOpenAllStudents} />
-          <StatCard label={t('admin_dashboard.today_sessions')} value={stats?.todaySessions ?? 0} icon={<Ionicons name="calendar" size={28} color={themeColors.success} />} color={themeColors.success} />
-          <StatCard label={t('admin_dashboard.total_offers')} value={stats?.totalOffers ?? 0} icon={<Ionicons name="cube" size={28} color={themeColors.warning} />} color={themeColors.warning} />
-          <StatCard
-            label={t('admin_dashboard.monthly_revenue')}
-            value={stats?.monthlyRevenue ? `${formatPrice(stats.monthlyRevenue)}` : '0 FCFA'}
-            icon={<Ionicons name="cash" size={28} color={themeColors.primary} />}
-            color={themeColors.primary}
-          />
-        </View>
 
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Banner Inscriptions en attente */}
         {stats?.pendingValidations && stats.pendingValidations > 0 ? (
-          <View style={[styles.warningBanner, Shadows.sm]}>
-            <Text style={styles.warningText}>
-              <Ionicons name="warning-outline" size={16} color={themeColors.warning || '#F59E0B'} /> {t('admin_dashboard.pending_validations', { count: stats.pendingValidations })}
-            </Text>
-          </View>
+          <TouchableOpacity 
+            onPress={handleOpenPendingEnrollments} 
+            style={[styles.warningBanner, Shadows.sm]}
+            activeOpacity={0.85}
+          >
+            <View style={styles.warningIconBadge}>
+              <Ionicons name="alert-circle-outline" size={22} color="#D97706" />
+            </View>
+            <View style={styles.warningContent}>
+              <Text style={styles.warningTitle}>Validation requise</Text>
+              <Text style={styles.warningText}>
+                {t('admin_dashboard.pending_validations', { count: stats.pendingValidations })}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#D97706" />
+          </TouchableOpacity>
         ) : null}
 
-        <TouchableOpacity 
-          style={{ backgroundColor: themeColors.primary, padding: 16, borderRadius: Radius.md, marginBottom: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', ...Shadows.sm }}
-          onPress={() => navigation.navigate('AdminModules')}
-        >
-          <Ionicons name="book" size={20} color={themeColors.textOnPrimary} style={{ marginRight: 8 }} />
-          <Text style={{ color: themeColors.textOnPrimary, fontWeight: '700', fontSize: 15 }}>
-            {t('admin_dashboard.manage_modules')}
-          </Text>
-        </TouchableOpacity>
+        {/* Aperçu de l'auto-école (#0F172A Hero Card) */}
+        <View style={styles.overviewCard}>
+          <View style={styles.overviewHeader}>
+            <Text style={styles.overviewTitle}>Aperçu de l'auto-école</Text>
+            <View style={styles.dateBadge}>
+              <Ionicons name="calendar-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
+              <Text style={styles.dateBadgeText}>{formatDate(todayStr)}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={styles.statItem} onPress={handleOpenAllStudents} activeOpacity={0.7}>
+              <Text style={styles.statValue}>{stats?.activeCandidates ?? 0}</Text>
+              <Text style={styles.statLabel}>Élèves{'\n'}actifs</Text>
+            </TouchableOpacity>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats?.todaySessions ?? 0}</Text>
+              <Text style={styles.statLabel}>Cours du{'\n'}jour</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats?.totalOffers ?? 0}</Text>
+              <Text style={styles.statLabel}>Offres{'\n'}disponibles</Text>
+            </View>
+          </View>
 
-        <TouchableOpacity 
-          style={{ backgroundColor: themeColors.secondary || themeColors.info, padding: 16, borderRadius: Radius.md, marginBottom: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', ...Shadows.sm }}
-          onPress={() => navigation.navigate('AdminVehicles')}
-        >
-          <Ionicons name="car-sport" size={20} color={themeColors.textOnPrimary} style={{ marginRight: 8 }} />
-          <Text style={{ color: themeColors.textOnPrimary, fontWeight: '700', fontSize: 15 }}>
-            Gérer la flotte (Véhicules)
-          </Text>
-        </TouchableOpacity>
+          {/* Banner dédié au Chiffre d'Affaires (CA du mois) */}
+          <View style={styles.revenueBanner}>
+            <View style={styles.revenueHeaderRow}>
+              <View style={styles.revenueIconBadge}>
+                <Ionicons name="cash-outline" size={18} color="#10B981" />
+              </View>
+              <Text style={styles.revenueLabel}>CA du mois (Chiffre d'affaires)</Text>
+            </View>
+            <Text style={styles.revenueValue}>
+              {stats?.monthlyRevenue ? `${formatPrice(stats.monthlyRevenue)}` : '0 FCFA'}
+            </Text>
+          </View>
+        </View>
 
-        <Text style={[Typography.h3, { color: themeColors.textPrimary, marginVertical: 16 }]}>
-          {t('admin_dashboard.school_files')}
-        </Text>
-        <View style={{ backgroundColor: themeColors.surface, padding: Spacing.md, borderRadius: Radius.md, marginBottom: 16, ...Shadows.sm }}>
+        {/* Grille Navigation 3 Colonnes */}
+        <View style={styles.gridContainer}>
+          {ADMIN_TILES.map((tile) => (
+            <TouchableOpacity 
+              key={tile.id} 
+              style={styles.tile}
+              onPress={() => {
+                if (tile.route) navigation.navigate(tile.route)
+                else if (tile.action) tile.action()
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.tileIconContainer, { backgroundColor: tile.bgColor }]}>
+                <Ionicons name={tile.icon} size={28} color={tile.iconColor} />
+              </View>
+              <Text style={styles.tileTitle} numberOfLines={1}>{tile.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Documents & Fichiers de l'école */}
+        <Text style={styles.sectionTitle}>{t('admin_dashboard.school_files', 'Documents de l\'école')}</Text>
+        <View style={[styles.sectionCard, Shadows.sm]}>
           <TouchableOpacity 
-            style={[styles.actionBtn, { alignSelf: 'stretch', marginBottom: 12 }, uploading && { opacity: 0.7 }]} 
+            style={[styles.uploadActionBtn, uploading && { opacity: 0.7 }]} 
             onPress={handleUploadDocument}
             disabled={uploading}
           >
-            <Text style={[styles.actionBtnText, { textAlign: 'center' }]}>
-              {uploading ? t('admin_dashboard.uploading') : <><Ionicons name="attach-outline" size={16} /> {t('admin_dashboard.upload_file')}</>}
+            <Ionicons name="cloud-upload-outline" size={18} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={styles.uploadActionBtnText}>
+              {uploading ? t('admin_dashboard.uploading', 'Envoi en cours...') : t('admin_dashboard.upload_file', 'Ajouter un document')}
             </Text>
           </TouchableOpacity>
 
           {docsLoading ? (
-            <ActivityIndicator color={themeColors.primary} />
+            <ActivityIndicator color={themeColors.primary} style={{ marginVertical: 12 }} />
           ) : documents.length === 0 ? (
-            <Text style={styles.emptyText}>{t('admin_dashboard.no_document')}</Text>
+            <Text style={styles.emptyText}>{t('admin_dashboard.no_document', 'Aucun document téléversé')}</Text>
           ) : (
             documents.map((doc, idx) => (
               <TouchableOpacity
                 key={idx}
-                style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: themeColors.borderLight }}
+                style={styles.docRow}
                 onPress={() => Linking.openURL(doc.fileUrl)}
               >
-                <Ionicons name="document-text" size={24} color={themeColors.primary} style={{ marginRight: 10 }} />
+                <View style={styles.docIconBg}>
+                  <Ionicons name="document-text-outline" size={20} color="#4F46E5" />
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ ...Typography.bodyMedium, color: themeColors.textPrimary, fontWeight: '500' }} numberOfLines={1}>{doc.name}</Text>
-                  <Text style={{ ...Typography.caption, color: themeColors.textMuted }}>
-                    {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : t('admin_dashboard.new')}
+                  <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
+                  <Text style={styles.docDate}>
+                    {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : t('admin_dashboard.new', 'Nouveau')}
                   </Text>
                 </View>
+                <Ionicons name="open-outline" size={18} color={themeColors.textMuted} />
               </TouchableOpacity>
             ))
           )}
         </View>
 
-        <Text style={[Typography.h3, { color: themeColors.textPrimary, marginVertical: 16 }]}>
-          {t('admin_dashboard.recent_activities')}
-        </Text>
+        {/* Séances à venir */}
+        <Text style={styles.sectionTitle}>Séances du jour & à venir</Text>
+        {stats?.upcomingSessions && stats.upcomingSessions.length > 0 ? (
+          stats.upcomingSessions.map((session) => (
+            <View key={session.id} style={[styles.sessionCard, Shadows.sm]}>
+              <View style={styles.sessionCardHeader}>
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="car-sport" size={24} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sessionTitle}>Élève: {session.studentName}</Text>
+                  <View style={styles.timeRow}>
+                    <Ionicons name="time-outline" size={14} color={themeColors.textSecondary} />
+                    <Text style={styles.timeText}>
+                      {formatDate(session.date)} • {session.startTime} - {session.endTime}
+                    </Text>
+                  </View>
+                  <Text style={styles.sessionSub}>Moniteur: {session.monitorName}</Text>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#4F46E5',
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: Radius.md,
+                      marginTop: 8,
+                      alignSelf: 'flex-start',
+                    }}
+                    onPress={() => setTrackingSession(session)}
+                  >
+                    <Ionicons name="navigate-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>Suivi GPS en Temps Réel</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>Planifié</Text>
+                </View>
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyCardText}>Aucune séance prévue pour le moment.</Text>
+          </View>
+        )}
+
+        {/* Activités récentes */}
+        <Text style={styles.sectionTitle}>{t('admin_dashboard.recent_activities', 'Activités récentes')}</Text>
         {stats?.recentActivities && stats.recentActivities.length > 0 ? (
           stats.recentActivities.map((act) => (
-            <View key={act.id} style={[styles.activityCard, Shadows.sm]}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: themeColors.primary, marginRight: 10 }} />
+            <View key={act.id} style={[styles.activityItemCard, Shadows.sm]}>
+              <View style={styles.activityDotBg} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.activityMsg}>{act.message}</Text>
+                <Text style={styles.activityMsg}>{act.description}</Text>
                 <Text style={styles.activityTime}>{formatDate(act.timestamp)}</Text>
               </View>
             </View>
           ))
         ) : (
-          <Text style={{ color: themeColors.textSecondary, fontStyle: 'italic', paddingLeft: Spacing.sm }}>
-            {t('admin_dashboard.no_activity')}
-          </Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyCardText}>{t('admin_dashboard.no_activity', 'Aucune activité récente')}</Text>
+          </View>
         )}
       </ScrollView>
 
@@ -356,6 +511,49 @@ export default function AdminDashboardScreen({ navigation }) {
           </ScrollView>
         )}
       </Modal>
+
+      <Modal isVisible={pendingModalVisible} onClose={() => setPendingModalVisible(false)} title="Inscriptions en attente">
+        {loadingPending ? (
+          <ActivityIndicator size="large" color={themeColors.primary} style={{ marginVertical: 20 }} />
+        ) : pendingEnrollments.length === 0 ? (
+          <EmptyState message="Aucune inscription en attente" icon="✅" />
+        ) : (
+          <ScrollView style={{ maxHeight: 500 }}>
+            {pendingEnrollments.map((enrollment, index) => (
+              <View key={index} style={{ marginBottom: 12, padding: 16, backgroundColor: themeColors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: themeColors.borderLight, ...Shadows.sm }}>
+                <Text style={{ fontWeight: 'bold', fontSize: 16, color: themeColors.textPrimary }}>{enrollment.studentName}</Text>
+                <Text style={{ color: themeColors.textSecondary, marginTop: 4 }}>Offre: {enrollment.offerName}</Text>
+                <Text style={{ color: themeColors.textSecondary }}>Prix: {formatPrice(enrollment.price)}</Text>
+                <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>Inscrit le: {new Date(enrollment.enrolledAt).toLocaleDateString()}</Text>
+                
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 10 }}>
+                  <TouchableOpacity 
+                    style={{ flex: 1, padding: 10, backgroundColor: themeColors.errorLight, borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
+                    onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'CANCELLED')}
+                    disabled={updatingEnrollmentId === enrollment.id}
+                  >
+                    <Text style={{ color: themeColors.error, fontWeight: 'bold' }}>Refuser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={{ flex: 1, padding: 10, backgroundColor: themeColors.success, borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
+                    onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'ACTIVE')}
+                    disabled={updatingEnrollmentId === enrollment.id}
+                  >
+                    <Text style={{ color: themeColors.textWhite, fontWeight: 'bold' }}>Accepter</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </Modal>
+
+      <LiveSessionTrackingModal
+        visible={!!trackingSession}
+        onClose={() => setTrackingSession(null)}
+        session={trackingSession}
+        isInstructor={false}
+      />
     </SafeAreaView>
   )
 }
@@ -398,9 +596,11 @@ export function AdminOffersScreen() {
   const [permitType, setPermitType] = useState('B')
   const [showPermitPicker, setShowPermitPicker] = useState(false)
 
-  useEffect(() => {
-    loadOffers()
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      loadOffers()
+    }, [])
+  )
 
   async function loadOffers() {
     try {
@@ -688,9 +888,11 @@ export function AdminInstructorsScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  useEffect(() => {
-    loadMonitors()
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      loadMonitors()
+    }, [])
+  )
 
   async function loadMonitors() {
     try {
@@ -751,6 +953,16 @@ export function AdminInstructorsScreen() {
           Alert.alert(t('schools.err_title', 'Erreur'), t('admin_instructors.err_pwd_req'))
           return
         }
+        if (password.length < 8) {
+          Alert.alert(t('schools.err_title', 'Erreur'), t('admin_instructors.err_pwd_len'))
+          return
+        }
+        if (password !== confirmPassword) {
+          Alert.alert(t('schools.err_title', 'Erreur'), t('admin_instructors.err_pwd_match'))
+          return
+        }
+        monitorData.password = password
+      } else if (password) {
         if (password.length < 8) {
           Alert.alert(t('schools.err_title', 'Erreur'), t('admin_instructors.err_pwd_len'))
           return
@@ -894,25 +1106,25 @@ export function AdminInstructorsScreen() {
           <Text style={styles.label}>{t('admin_instructors.email_label')}</Text>
           <TextInput value={email} onChangeText={setEmail} keyboardType="email-address" style={styles.input} placeholder={t('admin_instructors.email_placeholder')} autoCapitalize="none" />
 
-          {!editingMonitor ? (
-            <>
-              <Text style={styles.label}>{t('admin_instructors.pwd_label')} * (8 caractères min)</Text>
-              <View style={styles.inputContainer}>
-                <TextInput value={password} onChangeText={setPassword} style={styles.inputField} placeholder={t('admin_instructors.pwd_placeholder')} secureTextEntry={!showPassword} autoCapitalize="none" />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-              
-              <Text style={styles.label}>{t('admin_instructors.confirm_pwd_label')} *</Text>
-              <View style={styles.inputContainer}>
-                <TextInput value={confirmPassword} onChangeText={setConfirmPassword} style={styles.inputField} placeholder={t('admin_instructors.confirm_pwd_placeholder')} secureTextEntry={!showConfirmPassword} autoCapitalize="none" />
-                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
-                  <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : null}
+          <Text style={styles.label}>
+            {t('admin_instructors.pwd_label')} {!editingMonitor ? '* (8 caractères min)' : '(Optionnel, 8 caractères min)'}
+          </Text>
+          <View style={styles.inputContainer}>
+            <TextInput value={password} onChangeText={setPassword} style={styles.inputField} placeholder={t('admin_instructors.pwd_placeholder')} secureTextEntry={!showPassword} autoCapitalize="none" />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.label}>
+            {t('admin_instructors.confirm_pwd_label')} {!editingMonitor ? '*' : ''}
+          </Text>
+          <View style={styles.inputContainer}>
+            <TextInput value={confirmPassword} onChangeText={setConfirmPassword} style={styles.inputField} placeholder={t('admin_instructors.confirm_pwd_placeholder')} secureTextEntry={!showConfirmPassword} autoCapitalize="none" />
+            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
+              <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>{t('admin_instructors.license_label')}</Text>
           <TextInput value={licenseNumber} onChangeText={setLicenseNumber} style={styles.input} placeholder={t('admin_instructors.license_placeholder')} />
@@ -970,9 +1182,14 @@ export function AdminPlanningScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false)
 
   const [chosenOfferIds, setChosenOfferIds] = useState([])
-  const [selectedMonitorId, setSelectedMonitorId] = useState('')
+  const [selectedMonitorIds, setSelectedMonitorIds] = useState([])
   const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const [selectedModuleId, setSelectedModuleId] = useState('')
+
+  const [showOfferDropdown, setShowOfferDropdown] = useState(false)
+  const [showMonitorDropdown, setShowMonitorDropdown] = useState(false)
+  const [showVehicleDropdown, setShowVehicleDropdown] = useState(false)
+  const [showModuleDropdown, setShowModuleDropdown] = useState(false)
 
   const [startTime, setStartTime] = useState('09:00')
   const [startTimeObj, setStartTimeObj] = useState(new Date(new Date().setHours(9, 0, 0, 0)))
@@ -984,9 +1201,11 @@ export function AdminPlanningScreen() {
 
   const [meetingPoint, setMeetingPoint] = useState('')
 
-  useEffect(() => {
-    loadPreRequisites()
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      loadPreRequisites()
+    }, [])
+  )
 
   const onDateChange = (event, selectedDateVal) => {
     setShowDatePicker(Platform.OS === 'ios')
@@ -1022,17 +1241,35 @@ export function AdminPlanningScreen() {
   async function loadPreRequisites() {
     try {
       setLoading(true)
-      const [monitorsList, modulesList, offersList, vehiclesList] = await Promise.all([
+      const results = await Promise.allSettled([
         getAdminMonitors(),
         getAdminModules(),
         getAdminOffers(),
         getAdminVehicles(),
       ])
-      setMonitors(monitorsList)
-      setModules(modulesList)
-      setAvailableOffers(offersList)
-      setVehicles(vehiclesList.filter(v => v.status === 'ACTIVE'))
+
+      const [monitorsRes, modulesRes, offersRes, vehiclesRes] = results
+
+      if (monitorsRes.status === 'fulfilled' && Array.isArray(monitorsRes.value)) {
+        setMonitors(monitorsRes.value)
+      }
+      if (modulesRes.status === 'fulfilled' && Array.isArray(modulesRes.value)) {
+        setModules(modulesRes.value)
+      }
+      if (offersRes.status === 'fulfilled' && Array.isArray(offersRes.value)) {
+        setAvailableOffers(offersRes.value)
+      }
+      if (vehiclesRes.status === 'fulfilled' && Array.isArray(vehiclesRes.value)) {
+        setVehicles(vehiclesRes.value.filter(v => v?.isActive))
+      }
+
+      const allFailed = results.every(r => r.status === 'rejected')
+      if (allFailed) {
+        console.error('Failed to load all prerequisites:', results.map(r => r.reason))
+        Alert.alert(t('schools.err_title', 'Erreur'), t('admin_planning.err_load'))
+      }
     } catch (err) {
+      console.error('Error loading planning prerequisites:', err)
       Alert.alert(t('schools.err_title', 'Erreur'), t('admin_planning.err_load'))
     } finally {
       setLoading(false)
@@ -1049,7 +1286,7 @@ export function AdminPlanningScreen() {
   
 
   async function handleBookSession() {
-    if (!selectedDate || chosenOfferIds.length === 0 || !selectedMonitorId) {
+    if (!selectedDate || chosenOfferIds.length === 0 || selectedMonitorIds.length === 0) {
       Alert.alert(t('schools.err_title', 'Erreur'), t('admin_planning.err_fill_fields'))
       return
     }
@@ -1058,7 +1295,7 @@ export function AdminPlanningScreen() {
       setSaving(true)
       const payload = {
         offerIds: chosenOfferIds,
-        monitorId: selectedMonitorId,
+        monitorIds: selectedMonitorIds,
         vehicleId: selectedVehicleId || null,
         moduleId: selectedModuleId || null,
         date: selectedDate,
@@ -1073,7 +1310,7 @@ export function AdminPlanningScreen() {
       // Reset form
       setSelectedDate('')
       setChosenOfferIds([])
-      setSelectedMonitorId('')
+      setSelectedMonitorIds([])
       setSelectedVehicleId('')
       setSelectedModuleId('')
       setMeetingPoint('')
@@ -1115,71 +1352,32 @@ export function AdminPlanningScreen() {
             )}
 
             <Text style={styles.label}>{t('admin_planning.offer_label')}</Text>
-            <View style={styles.selectWrapper}>
-              {availableOffers.map((offer) => (
-                <TouchableOpacity
-                  key={offer.id}
-                  onPress={() => setChosenOfferIds(prev => prev.includes(offer.id) ? prev.filter(id => id !== offer.id) : [...prev, offer.id])}
-                  style={[
-                    styles.selectOption,
-                    chosenOfferIds.includes(offer.id) && styles.selectOptionActive,
-                  ]}
-                >
-                  <Text style={[styles.selectOptionText, chosenOfferIds.includes(offer.id) && styles.selectOptionTextActive]}>
-                    {offer.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              {availableOffers.length === 0 && (
-                <Text style={styles.emptyText}>{t('admin_planning.no_offer')}</Text>
-              )}
-            </View>
-
+            <TouchableOpacity onPress={() => setShowOfferDropdown(true)} style={[styles.input, { justifyContent: 'center', height: 44 }]}>
+              <Text style={{ color: chosenOfferIds.length > 0 ? themeColors.textPrimary : themeColors.textMuted }}>
+                {chosenOfferIds.length > 0 ? `${chosenOfferIds.length} offre(s) sélectionnée(s)` : t('admin_planning.no_offer')}
+              </Text>
+            </TouchableOpacity>
 
             <Text style={styles.label}>{t('admin_planning.monitor_label')}</Text>
-            <View style={styles.selectWrapper}>
-              {monitors.map((mon) => (
-                <TouchableOpacity
-                  key={mon.id}
-                  onPress={() => setSelectedMonitorId(mon.id)}
-                  style={[
-                    styles.selectOption,
-                    selectedMonitorId === mon.id && styles.selectOptionActive,
-                  ]}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="person-outline" size={16} color={selectedMonitorId === mon.id ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.selectOptionText, selectedMonitorId === mon.id && styles.selectOptionTextActive]}>
-                      {mon.firstName} {mon.lastName}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity onPress={() => setShowMonitorDropdown(true)} style={[styles.input, { justifyContent: 'center', height: 44 }]}>
+              <Text style={{ color: selectedMonitorIds.length > 0 ? themeColors.textPrimary : themeColors.textMuted }}>
+                {selectedMonitorIds.length > 0 ? `${selectedMonitorIds.length} moniteur(s) sélectionné(s)` : 'Sélectionner...'}
+              </Text>
+            </TouchableOpacity>
 
             <Text style={styles.label}>Véhicule (Optionnel)</Text>
-            <View style={styles.selectWrapper}>
-              {vehicles.map((veh) => (
-                <TouchableOpacity
-                  key={veh.id}
-                  onPress={() => setSelectedVehicleId(prev => prev === veh.id ? '' : veh.id)}
-                  style={[
-                    styles.selectOption,
-                    selectedVehicleId === veh.id && styles.selectOptionActive,
-                  ]}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="car-sport-outline" size={16} color={selectedVehicleId === veh.id ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.selectOptionText, selectedVehicleId === veh.id && styles.selectOptionTextActive]}>
-                      {veh.brand} {veh.model} ({veh.registrationNumber})
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {vehicles.length === 0 && (
-                <Text style={styles.emptyText}>Aucun véhicule actif disponible.</Text>
-              )}
-            </View>
+            <TouchableOpacity onPress={() => setShowVehicleDropdown(true)} style={[styles.input, { justifyContent: 'center', height: 44 }]}>
+              <Text style={{ color: selectedVehicleId ? themeColors.textPrimary : themeColors.textMuted }}>
+                {selectedVehicleId ? vehicles.find(v => v.id === selectedVehicleId)?.name : 'Sélectionner...'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.label}>Module Pédagogique (Optionnel)</Text>
+            <TouchableOpacity onPress={() => setShowModuleDropdown(true)} style={[styles.input, { justifyContent: 'center', height: 44 }]}>
+              <Text style={{ color: selectedModuleId ? themeColors.textPrimary : themeColors.textMuted }}>
+                {selectedModuleId ? modules.find(m => m.id === selectedModuleId)?.name : 'Sélectionner...'}
+              </Text>
+            </TouchableOpacity>
 
 
 
@@ -1224,6 +1422,122 @@ export function AdminPlanningScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Offers Dropdown Modal */}
+      <Modal isVisible={showOfferDropdown} onClose={() => setShowOfferDropdown(false)} title={t('admin_planning.offer_label')}>
+        <ScrollView style={{ maxHeight: 300 }}>
+          <View style={styles.selectWrapper}>
+            {availableOffers.map((offer) => (
+              <TouchableOpacity
+                key={offer.id}
+                onPress={() => setChosenOfferIds(prev => prev.includes(offer.id) ? prev.filter(id => id !== offer.id) : [...prev, offer.id])}
+                style={[
+                  styles.selectOption,
+                  chosenOfferIds.includes(offer.id) && styles.selectOptionActive,
+                  { width: '100%', marginBottom: 8 }
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={chosenOfferIds.includes(offer.id) ? 'checkbox' : 'square-outline'} size={20} color={chosenOfferIds.includes(offer.id) ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.selectOptionText, chosenOfferIds.includes(offer.id) && styles.selectOptionTextActive, { flex: 1, flexWrap: 'wrap' }]}>
+                    {offer.name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            {availableOffers.length === 0 && (
+              <Text style={styles.emptyText}>{t('admin_planning.no_offer')}</Text>
+            )}
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Monitors Dropdown Modal */}
+      <Modal isVisible={showMonitorDropdown} onClose={() => setShowMonitorDropdown(false)} title={t('admin_planning.monitor_label')}>
+        <ScrollView style={{ maxHeight: 300 }}>
+          <View style={styles.selectWrapper}>
+            {monitors.map((mon) => (
+              <TouchableOpacity
+                key={mon.id}
+                onPress={() => setSelectedMonitorIds(prev => prev.includes(mon.id) ? prev.filter(id => id !== mon.id) : [...prev, mon.id])}
+                style={[
+                  styles.selectOption,
+                  selectedMonitorIds.includes(mon.id) && styles.selectOptionActive,
+                  { width: '100%', marginBottom: 8 }
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={selectedMonitorIds.includes(mon.id) ? 'checkbox' : 'square-outline'} size={20} color={selectedMonitorIds.includes(mon.id) ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.selectOptionText, selectedMonitorIds.includes(mon.id) && styles.selectOptionTextActive, { flex: 1, flexWrap: 'wrap' }]}>
+                    {mon.firstName} {mon.lastName}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            {monitors.length === 0 && (
+              <Text style={styles.emptyText}>Aucun moniteur disponible</Text>
+            )}
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Vehicles Dropdown Modal */}
+      <Modal isVisible={showVehicleDropdown} onClose={() => setShowVehicleDropdown(false)} title="Véhicule (Optionnel)">
+        <ScrollView style={{ maxHeight: 300 }}>
+          <View style={styles.selectWrapper}>
+            {vehicles.map((veh) => (
+              <TouchableOpacity
+                key={veh.id}
+                onPress={() => setSelectedVehicleId(prev => prev === veh.id ? '' : veh.id)}
+                style={[
+                  styles.selectOption,
+                  selectedVehicleId === veh.id && styles.selectOptionActive,
+                  { width: '100%', marginBottom: 8 }
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={selectedVehicleId === veh.id ? 'radio-button-on' : 'radio-button-off'} size={20} color={selectedVehicleId === veh.id ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.selectOptionText, selectedVehicleId === veh.id && styles.selectOptionTextActive, { flex: 1, flexWrap: 'wrap' }]}>
+                    {veh.name} {veh.plateNumber ? `(${veh.plateNumber})` : ''}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            {vehicles.length === 0 && (
+              <Text style={styles.emptyText}>Aucun véhicule actif disponible.</Text>
+            )}
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Modules Dropdown Modal */}
+      <Modal isVisible={showModuleDropdown} onClose={() => setShowModuleDropdown(false)} title="Module Pédagogique (Optionnel)">
+        <ScrollView style={{ maxHeight: 300 }}>
+          <View style={styles.selectWrapper}>
+            {modules.map((mod) => (
+              <TouchableOpacity
+                key={mod.id}
+                onPress={() => setSelectedModuleId(prev => prev === mod.id ? '' : mod.id)}
+                style={[
+                  styles.selectOption,
+                  selectedModuleId === mod.id && styles.selectOptionActive,
+                  { width: '100%', marginBottom: 8 }
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={selectedModuleId === mod.id ? 'radio-button-on' : 'radio-button-off'} size={20} color={selectedModuleId === mod.id ? themeColors.textOnPrimary : themeColors.textSecondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.selectOptionText, selectedModuleId === mod.id && styles.selectOptionTextActive, { flex: 1, flexWrap: 'wrap' }]}>
+                    {mod.name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            {modules.length === 0 && (
+              <Text style={styles.emptyText}>Aucun module disponible.</Text>
+            )}
+          </View>
+        </ScrollView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -1245,14 +1559,30 @@ export function AdminProfileScreen() {
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false)
 
+  const handleAvatarOptions = () => {
+    Alert.alert(
+      t('admin_profile.change_avatar', 'Changer la photo de profil'),
+      t('admin_profile.choose_source', 'Veuillez choisir la source'),
+      [
+        {
+          text: t('admin_profile.camera', 'Prendre une photo'),
+          onPress: takePhoto,
+        },
+        {
+          text: t('admin_profile.gallery', 'Choisir dans la galerie'),
+          onPress: pickImage,
+        },
+        {
+          text: t('common.cancel', 'Annuler'),
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const processImageUpload = async (result) => {
     if (!result.canceled) {
       setUploadingAvatar(true)
       try {
@@ -1260,6 +1590,7 @@ export function AdminProfileScreen() {
         if (uploadRes.fileUrl) {
           await updateProfile({ avatarUrl: uploadRes.fileUrl });
           await refreshUser();
+          setAvatarModalVisible(false);
         }
       } catch (e) {
         Alert.alert(t('schools.err_title', 'Erreur'), t('admin_profile.err_upload_avatar'));
@@ -1267,6 +1598,31 @@ export function AdminProfileScreen() {
         setUploadingAvatar(false)
       }
     }
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    processImageUpload(result);
+  };
+
+  const takePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (permissionResult.granted === false) {
+      Alert.alert(t('schools.err_title', 'Erreur'), "L'accès à la caméra est requis.");
+      return;
+    }
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    processImageUpload(result);
   };
 
   // School form
@@ -1304,11 +1660,13 @@ export function AdminProfileScreen() {
     }
   };
 
-  useEffect(() => {
-    if (user?.role === 'SCHOOL_ADMIN') {
-      loadSchoolProfile()
-    }
-  }, [user?.role])
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.role === 'SCHOOL_ADMIN') {
+        loadSchoolProfile()
+      }
+    }, [user?.role])
+  )
 
   async function loadSchoolProfile() {
     try {
@@ -1363,7 +1721,7 @@ export function AdminProfileScreen() {
           </TouchableOpacity>
           <Text style={styles.title}>{t('navigation.profile', 'Mon Profil')}</Text>
         </View>
-        <TouchableOpacity onPress={pickImage} disabled={uploadingAvatar} style={{ alignSelf: 'center', marginTop: 16 }}>
+        <TouchableOpacity onPress={() => setAvatarModalVisible(true)} disabled={uploadingAvatar} style={{ alignSelf: 'center', marginTop: 16 }}>
           <View style={styles.avatarCircle}>
             {uploadingAvatar ? (
               <ActivityIndicator color={themeColors.dark} />
@@ -1396,8 +1754,26 @@ export function AdminProfileScreen() {
         </TouchableOpacity>
       </View>
 
+      <Modal isVisible={avatarModalVisible} onClose={() => setAvatarModalVisible(false)} title={t('admin_profile.avatar_title', 'Photo de profil')}>
+        <View style={{ alignItems: 'center', paddingVertical: Spacing.xl }}>
+          {user?.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={{ width: 200, height: 200, borderRadius: 100, marginBottom: 20 }} />
+          ) : (
+            <View style={{ width: 200, height: 200, borderRadius: 100, backgroundColor: themeColors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 64, color: themeColors.textOnPrimary }}>
+                {user?.firstName?.[0]}{user?.lastName?.[0]}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity onPress={handleAvatarOptions} style={[styles.actionBtn, { flexDirection: 'row', alignItems: 'center' }]}>
+            <Ionicons name="camera" size={20} color={themeColors.textOnPrimary} style={{ marginRight: 8 }} />
+            <Text style={styles.actionBtnText}>{t('admin_profile.change_avatar', 'Changer la photo de profil')}</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       <Modal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={t('admin_profile.modal_title_edit')}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+        <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 40 }}>
           {loading ? (
             <ActivityIndicator color={themeColors.primary} style={{ marginTop: 20 }} />
           ) : (
@@ -1456,9 +1832,68 @@ export function AdminProfileScreen() {
 // STYLES
 // =====================================================
 function getStyles(themeColors) { return StyleSheet.create({
-  root: { flex: 1, backgroundColor: themeColors.background },
-  header: { backgroundColor: themeColors.dark, padding: Spacing.lg, paddingBottom: 28 },
-  title: { ...Typography.h2, color: themeColors.textWhite, marginBottom: 4 },
+  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    backgroundColor: '#F9FAFB',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  menuButton: {
+    padding: 4,
+  },
+  notificationBtn: {
+    padding: 8,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  greetingContainer: {
+    marginBottom: Spacing.xs,
+  },
+  greetingText: {
+    fontSize: 16,
+    color: themeColors.textSecondary,
+    fontWeight: '600',
+  },
+  userName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#111827',
+    marginTop: 4,
+  },
+  userRole: {
+    fontSize: 14,
+    color: themeColors.textMuted,
+    marginTop: 4,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+  },
+  title: { ...Typography.h2, color: themeColors.textPrimary, marginBottom: 4 },
   subtitle: { ...Typography.body, color: '#9CA3AF' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { padding: Spacing.md },
@@ -1467,12 +1902,306 @@ function getStyles(themeColors) { return StyleSheet.create({
   statIcon: { fontSize: 28, marginBottom: 8 },
   statValue: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
   statLabel: { fontSize: 11, color: themeColors.textSecondary, textAlign: 'center' },
-  warningBanner: { backgroundColor: themeColors.warningLight, padding: 14, borderRadius: Radius.md, marginBottom: 16 },
-  warningText: { color: themeColors.warning, fontWeight: '700', fontSize: 13 },
+  warningBanner: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  warningContent: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  overviewCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    ...Shadows.md,
+  },
+  overviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  overviewTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  dateBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  statLabel: {
+    color: '#9CA3AF',
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  revenueBanner: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: Radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  revenueHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  revenueIconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  revenueLabel: {
+    color: '#D1D5DB',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  revenueValue: {
+    color: '#10B981',
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xl,
+  },
+  tile: {
+    width: '31%',
+    backgroundColor: '#FFF',
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.sm,
+    shadowOpacity: 0.05,
+  },
+  tileIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tileTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: themeColors.textPrimary,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: themeColors.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  sectionCard: {
+    backgroundColor: '#FFF',
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: themeColors.borderLight,
+    marginBottom: Spacing.xl,
+  },
+  uploadActionBtn: {
+    backgroundColor: '#4F46E5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.sm,
+  },
+  uploadActionBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  docIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  docName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: themeColors.textPrimary,
+  },
+  docDate: {
+    fontSize: 12,
+    color: themeColors.textMuted,
+    marginTop: 2,
+  },
+  sessionCard: {
+    backgroundColor: '#FFF',
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: themeColors.borderLight,
+    marginBottom: Spacing.md,
+  },
+  sessionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  sessionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: themeColors.textPrimary,
+    marginBottom: 2,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  timeText: {
+    fontSize: 12,
+    color: themeColors.textSecondary,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  sessionSub: {
+    fontSize: 12,
+    color: themeColors.textMuted,
+  },
+  statusBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  statusText: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activityItemCard: {
+    backgroundColor: '#FFF',
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: themeColors.borderLight,
+  },
+  activityDotBg: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4F46E5',
+    marginRight: 12,
+  },
   activityCard: { backgroundColor: themeColors.surface, padding: 12, borderRadius: Radius.md, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
   activityDot: { fontSize: 10 },
-  activityMsg: { ...Typography.body, color: themeColors.textPrimary },
+  activityMsg: { ...Typography.body, color: themeColors.textPrimary, fontSize: 13, fontWeight: '500' },
   activityTime: { ...Typography.caption, color: themeColors.textMuted, marginTop: 2 },
+  emptyCard: {
+    backgroundColor: '#FFF',
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: themeColors.borderLight,
+    marginBottom: Spacing.md,
+  },
+  emptyCardText: {
+    color: themeColors.textSecondary,
+    fontStyle: 'italic',
+  },
   list: { padding: Spacing.md },
   card: { backgroundColor: themeColors.surface, borderRadius: Radius.md, padding: Spacing.md, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   offerName: { ...Typography.bodyMedium, color: themeColors.textPrimary, fontWeight: '700' },

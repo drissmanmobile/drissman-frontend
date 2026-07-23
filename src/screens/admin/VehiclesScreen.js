@@ -36,7 +36,20 @@ export default function AdminVehiclesScreen({ navigation }) {
     try {
       setLoading(true);
       const data = await getAdminVehicles();
-      setVehicles(data);
+      const mappedVehicles = data.map(v => {
+        const parts = (v.name || '').split(' ');
+        const brand = parts[0] || '';
+        const model = parts.slice(1).join(' ');
+        return {
+          ...v,
+          brand,
+          model,
+          registrationNumber: v.plateNumber,
+          status: v.isActive ? 'ACTIVE' : 'INACTIVE',
+          transmission: 'MANUAL' // Default since backend doesn't store it
+        };
+      });
+      setVehicles(mappedVehicles);
     } catch (err) {
       Alert.alert(t('schools.err_title', 'Erreur'), 'Erreur lors du chargement des véhicules.');
     } finally {
@@ -72,11 +85,9 @@ export default function AdminVehiclesScreen({ navigation }) {
     try {
       setSaving(true);
       const vehicleData = {
-        brand,
-        model,
-        registrationNumber,
-        transmission,
-        status,
+        name: `${brand} ${model}`.trim(),
+        plateNumber: registrationNumber,
+        isActive: status === 'ACTIVE',
       };
       
       if (editingVehicle) {
@@ -253,29 +264,33 @@ export default function AdminVehiclesScreen({ navigation }) {
 }
 
 const getStyles = (themeColors) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: themeColors.background },
+  root: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
+    backgroundColor: '#F9FAFB',
   },
   title: { ...Typography.h2, color: themeColors.textPrimary },
   subtitle: { ...Typography.bodyMedium, color: themeColors.textSecondary },
   actionBtn: {
     backgroundColor: themeColors.primary,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
   },
   actionBtnText: { color: themeColors.textOnPrimary, fontWeight: '600', fontSize: 13 },
   list: { padding: Spacing.lg },
   card: {
-    backgroundColor: themeColors.surface,
+    backgroundColor: '#FFF',
     padding: Spacing.md,
-    borderRadius: Radius.md,
+    borderRadius: Radius.xl,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: themeColors.borderLight || '#F3F4F6',
+    ...Shadows.sm,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   vehicleName: { ...Typography.h4, color: themeColors.textPrimary },

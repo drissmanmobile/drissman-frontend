@@ -171,15 +171,21 @@ export default function StudentPaymentsScreen() {
               <Text style={styles.actionBtnTextOutline}>Actualiser</Text>
             </TouchableOpacity>
             
-            {item.checkoutUrl && (
-              <TouchableOpacity
-                style={styles.actionBtnSolid}
-                onPress={() => handleOpenCheckout(item.checkoutUrl)}
-              >
-                <Ionicons name="card" size={16} color="#fff" />
-                <Text style={styles.actionBtnTextSolid}>Payer</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.actionBtnSolid}
+              onPress={() => {
+                if (item.checkoutUrl) {
+                  handleOpenCheckout(item.checkoutUrl);
+                } else {
+                  setSelectedEnrollmentId(item.enrollmentId);
+                  setSelectedMethod(item.method || null);
+                  setPaymentModalVisible(true);
+                }
+              }}
+            >
+              <Ionicons name="card" size={16} color="#fff" />
+              <Text style={styles.actionBtnTextSolid}>Payer</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -312,17 +318,17 @@ export default function StudentPaymentsScreen() {
 const getStyles = (Colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F9FAFB',
   },
   header: {
     padding: 16,
-    backgroundColor: Colors.surface,
+    backgroundColor: '#F9FAFB',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight || '#E5E7EB',
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: Colors.textPrimary,
   },
   listContent: {
@@ -330,10 +336,12 @@ const getStyles = (Colors) => StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.borderLight || '#F3F4F6',
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 5,

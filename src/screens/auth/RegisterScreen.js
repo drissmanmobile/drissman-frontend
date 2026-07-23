@@ -25,6 +25,7 @@ export default function RegisterScreen({ navigation }) {
   const schema = useMemo(() => z.object({
     firstName: z.string().min(2, t('register.err_firstname')),
     lastName: z.string().min(2, t('register.err_lastname')),
+    username: z.string().optional(),
     email: z.string().email(t('register.err_email')),
     phone: z.string().min(9, t('register.err_phone')),
     password: z.string().min(6, t('register.err_password_len')),
@@ -51,7 +52,7 @@ export default function RegisterScreen({ navigation }) {
 
   const { control, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '', role: 'STUDENT', schoolName: '' },
+    defaultValues: { firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '', role: 'STUDENT', schoolName: '' },
   })
 
   const selectedRole = watch('role')
@@ -142,6 +143,15 @@ export default function RegisterScreen({ navigation }) {
               )} />
               {errors.lastName && <Text style={styles.error}>{errors.lastName.message}</Text>}
             </View>
+          </View>
+
+          {/* Nom d'utilisateur (Optionnel) */}
+          <View style={styles.field}>
+            <Text style={styles.label}>{t('register.username')}</Text>
+            <Controller control={control} name="username" render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput style={[styles.input, errors.username && styles.inputError]} placeholder={t('register.username_placeholder')} placeholderTextColor={themeColors.textMuted} onChangeText={onChange} onBlur={onBlur} value={value} autoCapitalize="none" autoCorrect={false} />
+            )} />
+            {errors.username && <Text style={styles.error}>{errors.username.message}</Text>}
           </View>
 
           {/* Email */}

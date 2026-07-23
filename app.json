@@ -25,7 +25,8 @@
         "foregroundImage": "./assets/auto-ecole.png",
         "backgroundColor": "#0A0F1E"
       },
-      "package": "cm.drissman.app"
+      "package": "cm.drissman.app",
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-secure-store",
@@ -37,7 +38,7 @@
     ],
     "scheme": "drissman",
     "extra": {
-      "apiUrl": "http://10.210.97.63:8080",
+      "apiUrl": "http://localhost:8080",
       "useMock": false,
       "eas": {
         "projectId": "04206e1b-ea5f-465a-8580-80e624cca5e2"

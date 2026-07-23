@@ -1,6 +1,6 @@
 // src/screens/student/PlanningScreen.js
 import { useState, useEffect } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, Image, Alert, Switch } from 'react-native'
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, Image, Alert, Switch, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { getStudentSessions, getSessionDocuments, uploadImage } from '../../services/services'
@@ -15,6 +15,8 @@ import { useTheme } from '../../context/ThemeContext'
 import { useSideMenu } from '../../context/SideMenuContext'
 import { useNavigation } from '@react-navigation/native'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
+import SessionLocationModal from '../../components/session/SessionLocationModal'
+
 
 
 function StudentPlanningScreen() {
@@ -29,7 +31,10 @@ function StudentPlanningScreen() {
   const [docsLoading, setDocsLoading] = useState(false)
   const [documents, setDocuments] = useState([])
 
+  const [trackingSession, setTrackingSession] = useState(null)
+
   const FILTERS = [
+
     { key: 'ALL', label: t('student_planning.filter_all') },
     { key: 'UPCOMING', label: t('student_planning.filter_upcoming') },
     { key: 'PAST', label: t('student_planning.filter_past') },
@@ -43,7 +48,7 @@ function StudentPlanningScreen() {
     setSelectedSessionDocs(session)
     setDocsLoading(true)
     try {
-      const docs = await getSessionDocuments(session.id)
+      const docs = await getSessionDocuments(session.sessionId || session.id)
       setDocuments(docs)
     } catch (e) {
       console.log('Error fetching docs', e)
@@ -55,8 +60,9 @@ function StudentPlanningScreen() {
 
   const now = new Date()
   const filtered = sessions.filter((s) => {
-    if (filter === 'UPCOMING') return new Date(s.date) >= now
-    if (filter === 'PAST') return new Date(s.date) < now
+    const sessionDate = new Date(`${s.date}T${s.startTime || '00:00:00'}`)
+    if (filter === 'UPCOMING') return sessionDate >= now
+    if (filter === 'PAST') return sessionDate < now
     return true
   })
 
@@ -82,20 +88,26 @@ function StudentPlanningScreen() {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(s) => s.id}
+          keyExtractor={(s, idx) => String(s.sessionId || s.id || idx)}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardLeft}>
                 <Text style={styles.date}>{formatDate(item.date)}</Text>
-                <Text style={styles.time}>{formatTime(item.date)}</Text>
+                <Text style={styles.time}>{item.startTime ? item.startTime.substring(0, 5) : '—'} - {item.endTime ? item.endTime.substring(0, 5) : '—'}</Text>
                 <Text style={styles.school} numberOfLines={1}>{item.schoolName}</Text>
                 <Text style={styles.offer} numberOfLines={1}>{item.offerName}</Text>
                 {item.meetingPoint && <Text style={styles.meeting}><Ionicons name="location-outline" size={14} color={themeColors.textMuted} /> {item.meetingPoint}</Text>}
                 
-                <TouchableOpacity onPress={() => handleViewDocuments(item)} style={styles.docsBtn}>
-                  <Text style={styles.docsBtnText}>{t('student_planning.view_docs')}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity onPress={() => handleViewDocuments(item)} style={styles.docsBtn}>
+                    <Text style={styles.docsBtnText}>{t('student_planning.view_docs')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setTrackingSession(item)} style={[styles.docsBtn, { backgroundColor: themeColors.primary }]}>
+                    <Ionicons name="location-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={[styles.docsBtnText, { color: '#FFF' }]}>Lieu du RDV</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <Badge status={item.status} />
             </View>
@@ -126,9 +138,16 @@ function StudentPlanningScreen() {
           </View>
         )}
       </Modal>
+
+      <SessionLocationModal
+        visible={!!trackingSession}
+        onClose={() => setTrackingSession(null)}
+        session={trackingSession}
+      />
     </SafeAreaView>
   )
 }
+
 
 // =====================================================
 // src/screens/student/BookingsScreen.js
@@ -182,54 +201,8 @@ export function StudentBookingsScreen() {
 // =====================================================
 // src/screens/student/ProgressScreen.js
 // =====================================================
-export function StudentProgressScreen() {
-  const { Colors: themeColors } = useTheme();
-  const styles = getStyles(themeColors);
-  const { t } = useTranslation()
-  const { user } = useAuth()
-  const [enrollments, setEnrollments] = useState([])
-  const [loading, setLoading] = useState(true)
+export { default as StudentProgressScreen } from './ProgressScreen';
 
-  useEffect(() => {
-    getStudentEnrollments(user?.id).then(setEnrollments).finally(() => setLoading(false))
-  }, [])
-
-  return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('student_progress.title')}</Text>
-        <Text style={styles.subtitle}>{t('student_progress.subtitle')}</Text>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={themeColors.primary} />
-      ) : (
-        <FlatList
-          data={enrollments}
-          keyExtractor={(e) => e.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            const pct = item.totalSessions > 0
-              ? Math.round((item.sessionsCompleted / item.totalSessions) * 100)
-              : 0
-            return (
-              <View style={styles.card}>
-                <Text style={styles.date}>{item.schoolName}</Text>
-                <Text style={styles.offer}>{item.offerName}</Text>
-                <View style={styles.progressBg}>
-                  <View style={[styles.progressFill, { width: `${pct}%` }]} />
-                </View>
-                <Text style={styles.progressLabel}>
-                  {item.sessionsCompleted}/{item.totalSessions} {t('student_progress.sessions')} ({pct}%)
-                </Text>
-              </View>
-            )
-          }}
-        />
-      )}
-    </SafeAreaView>
-  )
-}
 
 // =====================================================
 // src/screens/student/ProfileScreen.js & instructor/ProfileScreen.js
@@ -243,14 +216,62 @@ export function ProfileScreen() {
   const { openMenu } = useSideMenu()
   const [uploading, setUploading] = useState(false)
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false)
 
+  const [isEditing, setIsEditing] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const [formData, setFormData] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    email: user?.email || '',
+  })
+
+  useEffect(() => {
+    if (user && !isEditing) {
+      setFormData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+      })
+    }
+  }, [user, isEditing])
+
+  const handleSaveProfile = async () => {
+    setUpdating(true)
+    try {
+      await updateProfile(formData)
+      await refreshUser()
+      setIsEditing(false)
+      Alert.alert(t('common.success', 'Succès'), t('profile.updated_successfully', 'Profil mis à jour avec succès'))
+    } catch (e) {
+      Alert.alert('Erreur', e.message || 'Impossible de mettre à jour le profil')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const handleAvatarOptions = () => {
+    Alert.alert(
+      t('admin_profile.change_avatar', 'Changer la photo de profil'),
+      t('admin_profile.choose_source', 'Veuillez choisir la source'),
+      [
+        {
+          text: t('admin_profile.camera', 'Prendre une photo'),
+          onPress: takePhoto,
+        },
+        {
+          text: t('admin_profile.gallery', 'Choisir dans la galerie'),
+          onPress: pickImage,
+        },
+        {
+          text: t('common.cancel', 'Annuler'),
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const processImageUpload = async (result) => {
     if (!result.canceled) {
       setUploading(true)
       try {
@@ -258,6 +279,7 @@ export function ProfileScreen() {
         if (uploadRes.fileUrl) {
           await updateProfile({ avatarUrl: uploadRes.fileUrl });
           await refreshUser();
+          setAvatarModalVisible(false);
         }
       } catch (e) {
         Alert.alert('Erreur', 'Impossible de mettre à jour la photo de profil');
@@ -267,16 +289,47 @@ export function ProfileScreen() {
     }
   };
 
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    processImageUpload(result);
+  };
+
+  const takePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (permissionResult.granted === false) {
+      Alert.alert('Erreur', "L'accès à la caméra est requis.");
+      return;
+    }
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    processImageUpload(result);
+  };
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: themeColors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={openMenu} style={{ marginRight: Spacing.md }}>
-            <Ionicons name="menu" size={32} color={themeColors.textWhite} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={openMenu} style={{ marginRight: Spacing.md }}>
+              <Ionicons name="menu" size={32} color={themeColors.textWhite} />
+            </TouchableOpacity>
+            <Text style={styles.title}>{t('navigation.profile', 'Mon Profil')}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setIsEditing(!isEditing)} style={{ padding: 8 }}>
+            <Ionicons name={isEditing ? "close" : "pencil"} size={24} color={themeColors.textWhite} />
           </TouchableOpacity>
-          <Text style={styles.title}>{t('navigation.profile', 'Mon Profil')}</Text>
         </View>
-        <TouchableOpacity onPress={pickImage} disabled={uploading} style={{ alignSelf: 'center', marginTop: 16 }}>
+
+        <TouchableOpacity onPress={() => setAvatarModalVisible(true)} disabled={uploading} style={{ alignSelf: 'center', marginTop: 16 }}>
           <View style={styles.avatarCircle}>
             {uploading ? (
               <ActivityIndicator color={themeColors.dark} />
@@ -289,16 +342,77 @@ export function ProfileScreen() {
             )}
           </View>
         </TouchableOpacity>
-        <Text style={styles.title}>{user?.firstName} {user?.lastName}</Text>
-        <Text style={styles.subtitle}>{user?.email}</Text>
-        <View style={[styles.chip, styles.chipActive, { marginTop: 8 }]}>
-          <Text style={styles.chipTextActive}>{user?.role}</Text>
-        </View>
+        
+        {!isEditing && (
+          <View>
+            <Text style={styles.title}>{user?.firstName} {user?.lastName}</Text>
+            <Text style={styles.subtitle}>{user?.email}</Text>
+            <View style={[styles.chip, styles.chipActive, { marginTop: 8, alignSelf: 'flex-start' }]}>
+              <Text style={styles.chipTextActive}>{user?.role}</Text>
+            </View>
+          </View>
+        )}
       </View>
 
-      <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
-        <Text style={styles.logoutText}>{t('profile.logout')}</Text>
-      </TouchableOpacity>
+      <ScrollView contentContainerStyle={{ padding: Spacing.lg, flexGrow: 1 }}>
+        {isEditing ? (
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.formContainer}>
+              <Text style={styles.label}>{t('profile.first_name', 'Prénom')}</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.firstName}
+                onChangeText={(t) => setFormData({ ...formData, firstName: t })}
+                placeholderTextColor={themeColors.textMuted}
+              />
+              
+              <Text style={styles.label}>{t('profile.last_name', 'Nom')}</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.lastName}
+                onChangeText={(t) => setFormData({ ...formData, lastName: t })}
+                placeholderTextColor={themeColors.textMuted}
+              />
+
+              <Text style={styles.label}>{t('profile.email', 'Email')}</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.email}
+                onChangeText={(t) => setFormData({ ...formData, email: t })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholderTextColor={themeColors.textMuted}
+              />
+
+              <TouchableOpacity onPress={handleSaveProfile} disabled={updating} style={styles.saveBtn}>
+                {updating ? <ActivityIndicator color={themeColors.textOnPrimary} /> : <Text style={styles.saveBtnText}>{t('common.save', 'Enregistrer')}</Text>}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        ) : (
+          <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
+            <Text style={styles.logoutText}>{t('profile.logout')}</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      <Modal isVisible={avatarModalVisible} onClose={() => setAvatarModalVisible(false)} title={t('admin_profile.avatar_title', 'Photo de profil')}>
+        <View style={{ alignItems: 'center', paddingVertical: Spacing.xl }}>
+          {user?.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={{ width: 200, height: 200, borderRadius: 100, marginBottom: 20 }} />
+          ) : (
+            <View style={{ width: 200, height: 200, borderRadius: 100, backgroundColor: themeColors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 64, color: themeColors.textOnPrimary }}>
+                {user?.firstName?.[0]}{user?.lastName?.[0]}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity onPress={handleAvatarOptions} style={{ backgroundColor: themeColors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="camera" size={20} color={themeColors.textOnPrimary} style={{ marginRight: 8 }} />
+            <Text style={{ color: themeColors.textOnPrimary, fontWeight: '600', fontSize: 13 }}>{t('admin_profile.change_avatar', 'Changer la photo de profil')}</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -331,8 +445,13 @@ const getStyles = (themeColors) => StyleSheet.create({
   docName: { ...Typography.bodyMedium, color: themeColors.textPrimary },
   avatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: themeColors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   avatarText: { fontSize: 26, fontWeight: '800', color: themeColors.dark },
-  logoutBtn: { margin: Spacing.lg, padding: 16, borderRadius: Radius.md, backgroundColor: themeColors.errorLight, alignItems: 'center' },
+  logoutBtn: { marginVertical: Spacing.lg, padding: 16, borderRadius: Radius.md, backgroundColor: themeColors.errorLight, alignItems: 'center' },
   logoutText: { color: themeColors.error, fontWeight: '700', fontSize: 15 },
+  formContainer: { marginTop: 8 },
+  label: { ...Typography.smallMedium, color: themeColors.textPrimary, marginBottom: 8, marginTop: 12 },
+  input: { backgroundColor: themeColors.surface, borderWidth: 1, borderColor: themeColors.border, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: themeColors.textPrimary },
+  saveBtn: { marginTop: 24, padding: 16, borderRadius: Radius.md, backgroundColor: themeColors.primary, alignItems: 'center' },
+  saveBtnText: { color: themeColors.textOnPrimary, fontWeight: '700', fontSize: 15 },
 })
 
 export default StudentPlanningScreen

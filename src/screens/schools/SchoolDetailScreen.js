@@ -281,8 +281,14 @@ export default function SchoolDetailScreen({ route, navigation }) {
             school.offers.map((offer) => (
               <View key={offer.id} style={styles.offerCard}>
                 <View style={styles.offerHeader}>
-                  <Text style={styles.offerName}>{offer.name}</Text>
-                  <Text style={styles.offerPrice}>{formatPrice(offer.price)}</Text>
+                  <Image 
+                    source={{ uri: school.imageUrl || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=100&q=80' }} 
+                    style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F3F4F6' }} 
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.offerName}>{offer.name}</Text>
+                    <Text style={styles.offerPrice}>{formatPrice(offer.price)}</Text>
+                  </View>
                 </View>
                 
                 <Text style={styles.offerDesc}>{offer.description || t('schools.no_offer_desc')}</Text>

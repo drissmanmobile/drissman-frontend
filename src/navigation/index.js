@@ -27,6 +27,8 @@ import StudentProfileScreen from '../screens/student/ProfileScreen'
 import StudentQuizScreen from '../screens/student/StudentQuizScreen'
 import StudentNotificationsScreen from '../screens/student/StudentNotificationsScreen'
 import StudentPaymentsScreen from '../screens/student/StudentPaymentsScreen'
+import StudentDocumentsScreen from '../screens/student/StudentDocumentsScreen'
+import StudentMessagesScreen from '../screens/student/StudentMessagesScreen'
 // Admin screens
 import AdminDashboardScreen from '../screens/admin/DashboardScreen'
 import AdminOffersScreen from '../screens/admin/OffersScreen'
@@ -36,8 +38,14 @@ import AdminProfileScreen from '../screens/admin/ProfileScreen'
 import AdminModulesScreen from '../screens/admin/ModulesScreen'
 
 // Instructor screens
+import InstructorDashboardScreen from '../screens/instructor/InstructorDashboardScreen'
 import InstructorScheduleScreen from '../screens/instructor/ScheduleScreen'
+import InstructorStudentsScreen from '../screens/instructor/StudentsScreen'
+import InstructorStudentDetailScreen from '../screens/instructor/StudentDetailScreen'
+import InstructorStatsScreen from '../screens/instructor/InstructorStatsScreen'
+import InstructorMessagesScreen from '../screens/instructor/MessagesScreen'
 import InstructorProfileScreen from '../screens/instructor/ProfileScreen'
+import InstructorDocumentsScreen from '../screens/instructor/InstructorDocumentsScreen'
 
 // Schools screens
 import SchoolsListScreen from '../screens/schools/SchoolsListScreen'
@@ -104,6 +112,14 @@ function StudentTabs({ colors }) {
         options={{
           tabBarLabel: 'Tableau de bord',
           tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} colors={colors} />,
+        }}
+      />
+      <Tab.Screen
+        name="StudentExplore"
+        component={StudentHomeScreen}
+        options={{
+          tabBarLabel: 'Explorer',
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'search' : 'search-outline'} focused={focused} colors={colors} />,
         }}
       />
       <Tab.Screen
@@ -207,11 +223,35 @@ function InstructorTabs({ colors }) {
       }}
     >
       <Tab.Screen
+        name="InstructorDashboard"
+        component={InstructorDashboardScreen}
+        options={{
+          tabBarLabel: 'Accueil',
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} colors={colors} />,
+        }}
+      />
+      <Tab.Screen
+        name="InstructorStudents"
+        component={InstructorStudentsScreen}
+        options={{
+          tabBarLabel: 'Élèves',
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} colors={colors} />,
+        }}
+      />
+      <Tab.Screen
         name="InstructorSchedule"
         component={InstructorScheduleScreen}
         options={{
-          tabBarLabel: 'Mon Planning',
+          tabBarLabel: 'Planning',
           tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'calendar' : 'calendar-outline'} focused={focused} colors={colors} />,
+        }}
+      />
+      <Tab.Screen
+        name="InstructorMessages"
+        component={InstructorMessagesScreen}
+        options={{
+          tabBarLabel: 'Messages',
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} focused={focused} colors={colors} />,
         }}
       />
       <Tab.Screen
@@ -301,6 +341,11 @@ export default function AppNavigator() {
               options={{ headerShown: true, title: 'Quiz IA', headerBackTitle: '' }}
             />
             <Stack.Screen
+              name="StudentDocuments"
+              component={StudentDocumentsScreen}
+              options={{ headerShown: true, title: 'Mes Documents', headerBackTitle: '' }}
+            />
+            <Stack.Screen
               name="StudentNotifications"
               component={StudentNotificationsScreen}
               options={{ headerShown: true, title: 'Notifications', headerBackTitle: '' }}
@@ -308,6 +353,31 @@ export default function AppNavigator() {
             <Stack.Screen
               name="StudentPayments"
               component={StudentPaymentsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="StudentMessages"
+              component={StudentMessagesScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InstructorStudentDetail"
+              component={InstructorStudentDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InstructorStats"
+              component={InstructorStatsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InstructorMessages"
+              component={InstructorMessagesScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InstructorDocuments"
+              component={InstructorDocumentsScreen}
               options={{ headerShown: false }}
             />
           </>

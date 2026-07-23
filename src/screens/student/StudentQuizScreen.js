@@ -5,11 +5,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme';
+import { useAuth } from '../../context/AuthContext';
+import { getStudentEnrollments } from '../../services/services';
 
 export default function StudentQuizScreen() {
   const { Colors: themeColors } = useTheme();
   const styles = getStyles(themeColors);
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [quiz, setQuiz] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -23,9 +26,16 @@ export default function StudentQuizScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/quiz/generate?questions=5');
-      if (response.data && response.data.success) {
-        setQuiz(response.data.data);
+      let contextStr = '';
+      if (user?.id) {
+        const enrollments = await getStudentEnrollments(user.id);
+        if (enrollments && enrollments.length > 0) {
+          contextStr = `&context=${encodeURIComponent(enrollments[0].offerName)}`;
+        }
+      }
+      const quizData = await api.get(`/api/quiz/generate?questions=5${contextStr}`);
+      if (quizData && quizData.questions) {
+        setQuiz(quizData);
         setCurrentQuestionIndex(0);
         setSelectedChoiceIndex(null);
         setShowAnswer(false);

@@ -10,55 +10,49 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme';
+import api from '../../services/api';
 
 export default function StudentNotificationsScreen({ navigation }) {
   const { Colors: themeColors } = useTheme();
   const styles = getStyles(themeColors);
   const { t } = useTranslation();
-  // Simuler des notifications pour l'instant (car l'API pour récupérer les notifs n'est pas encore créée)
-  const [notifications, setNotifications] = useState([
-    {
-      id: '1',
-      title: t('notifications.course_title'),
-      message: t('notifications.course_msg'),
-      date: t('notifications.today'),
-      read: false,
-      type: 'course',
-    },
-    {
-      id: '2',
-      title: t('notifications.payment_title'),
-      message: t('notifications.payment_msg'),
-      date: t('notifications.yesterday'),
-      read: false,
-      type: 'payment',
-    },
-    {
-      id: '3',
-      title: t('notifications.exam_title'),
-      message: t('notifications.exam_msg'),
-      date: '05 Juil',
-      read: true,
-      type: 'exam',
-    },
-    {
-      id: '4',
-      title: t('notifications.admin_title'),
-      message: t('notifications.admin_msg'),
-      date: '01 Juil',
-      read: true,
-      type: 'admin',
-    },
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
-    );
+  React.useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/api/notifications');
+      setNotifications(Array.isArray(response) ? response : []);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+  const markAsRead = async (id) => {
+    try {
+      await api.patch(`/api/notifications/${id}/read`);
+      setNotifications(prev =>
+        prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
+      );
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await api.post('/api/notifications/read-all');
+      setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
   };
 
   const getIconForType = (type) => {
