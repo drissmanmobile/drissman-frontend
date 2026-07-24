@@ -14,6 +14,15 @@ export const fetchSessionTrail = async (sessionId) => {
 }
 
 let activeWatcher = null
+let activeSessionId = null
+
+export const getActiveTrackingSessionId = () => activeSessionId
+
+export const isInstructorTrackingActive = (sessionId) => {
+  if (!activeWatcher) return false
+  if (!sessionId) return true
+  return activeSessionId === sessionId
+}
 
 export const startInstructorSessionTracking = async (sessionId, onError) => {
   try {
@@ -27,6 +36,8 @@ export const startInstructorSessionTracking = async (sessionId, onError) => {
       activeWatcher.remove()
       activeWatcher = null
     }
+
+    activeSessionId = sessionId
 
     activeWatcher = await Location.watchPositionAsync(
       {
@@ -52,6 +63,7 @@ export const startInstructorSessionTracking = async (sessionId, onError) => {
     return activeWatcher
   } catch (err) {
     console.log('Erreur initialisation suivi GPS:', err)
+    activeSessionId = null
     if (onError) onError(err.message)
     return null
   }
@@ -62,4 +74,5 @@ export const stopInstructorSessionTracking = () => {
     activeWatcher.remove()
     activeWatcher = null
   }
+  activeSessionId = null
 }

@@ -75,10 +75,21 @@ export default function StudentNotificationsScreen({ navigation }) {
     }
   };
 
+  const handlePressNotification = (item) => {
+    markAsRead(item.id)
+    const monitorId = item.senderId || item.userId || item.monitorId || item.instructorId
+    if (item.type === 'course' || item.type === 'message' || monitorId) {
+      navigation.navigate('StudentMessages', {
+        monitorId: monitorId,
+        monitorName: item.senderName || item.title
+      })
+    }
+  }
+
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={[styles.notificationCard, !item.read && styles.unreadCard]}
-      onPress={() => markAsRead(item.id)}
+      onPress={() => handlePressNotification(item)}
       activeOpacity={0.7}
     >
       <View style={[styles.iconContainer, { backgroundColor: getColorForType(item.type) + '20' }]}>
@@ -89,7 +100,7 @@ export default function StudentNotificationsScreen({ navigation }) {
           <Text style={[styles.title, !item.read && styles.unreadText]}>{item.title}</Text>
           <Text style={styles.date}>{item.date}</Text>
         </View>
-        <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
+        <Text style={styles.message}>{item.message}</Text>
       </View>
       {!item.read && <View style={styles.unreadDot} />}
     </TouchableOpacity>

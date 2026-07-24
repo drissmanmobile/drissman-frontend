@@ -285,35 +285,52 @@ export default function InstructorScheduleScreen() {
                     ) : null}
                   </View>
 
-                  {/* Roll Call Button */}
-                  <TouchableOpacity
-                    style={[
-                      styles.rollCallBtn,
-                      isCompleted && styles.rollCallBtnDone,
-                      isCancelled && styles.rollCallBtnAbsent,
-                    ]}
-                    onPress={() => setSelectedSession(item)}
-                  >
-                    <Ionicons
-                      name={isCompleted ? 'checkmark-circle' : isCancelled ? 'close-circle' : 'checkbox-outline'}
-                      size={16}
-                      color={isCompleted ? '#16A34A' : isCancelled ? '#DC2626' : '#4F46E5'}
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text
+                  {/* Action Buttons Row */}
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                    <TouchableOpacity
                       style={[
-                        styles.rollCallBtnText,
-                        isCompleted && { color: '#16A34A' },
-                        isCancelled && { color: '#DC2626' },
+                        styles.rollCallBtn,
+                        { flex: 1, marginTop: 0 },
+                        isCompleted && styles.rollCallBtnDone,
+                        isCancelled && styles.rollCallBtnAbsent,
                       ]}
+                      onPress={() => setSelectedSession(item)}
                     >
-                      {isCompleted
-                        ? 'Présence validée'
-                        : isCancelled
-                        ? 'Absence signalée'
-                        : 'Faire l\'appel / Émarger'}
-                    </Text>
-                  </TouchableOpacity>
+                      <Ionicons
+                        name={isCompleted ? 'checkmark-circle' : isCancelled ? 'close-circle' : 'checkbox-outline'}
+                        size={16}
+                        color={isCompleted ? '#16A34A' : isCancelled ? '#DC2626' : '#4F46E5'}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={[
+                          styles.rollCallBtnText,
+                          isCompleted && { color: '#16A34A' },
+                          isCancelled && { color: '#DC2626' },
+                        ]}
+                      >
+                        {isCompleted
+                          ? 'Présence validée'
+                          : isCancelled
+                          ? 'Absence signalée'
+                          : 'Émargement'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.rollCallBtn,
+                        { backgroundColor: '#2563EB', marginTop: 0, paddingHorizontal: 10 },
+                      ]}
+                      onPress={() => {
+                        setSelectedSession(item)
+                        setShowTrackingModal(true)
+                      }}
+                    >
+                      <Ionicons name="navigate-outline" size={16} color="#FFF" style={{ marginRight: 4 }} />
+                      <Text style={[styles.rollCallBtnText, { color: '#FFF' }]}>Carte GPS</Text>
+                    </TouchableOpacity>
+                  </View>
                 </TouchableOpacity>
               </View>
             )
@@ -470,45 +487,46 @@ export default function InstructorScheduleScreen() {
   )
 }
 
-
 const getStyles = (themeColors) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#F9FAFB' },
+    root: { flex: 1, backgroundColor: themeColors.background },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: Spacing.lg,
       paddingVertical: Spacing.md,
-      backgroundColor: '#F9FAFB',
+      backgroundColor: themeColors.background,
     },
     menuButton: { padding: 4 },
     calendarIconBtn: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+    headerTitle: { fontSize: 18, fontWeight: '700', color: themeColors.textPrimary },
 
     dateSelectorContainer: { marginBottom: Spacing.md },
     monthTitle: {
       fontSize: 16,
       fontWeight: '700',
-      color: '#111827',
+      color: themeColors.textPrimary,
       paddingHorizontal: Spacing.lg,
       marginBottom: Spacing.sm,
     },
     daysScroll: { paddingHorizontal: Spacing.lg },
     dayCard: {
       alignItems: 'center',
-      justify: 'center',
+      justifyContent: 'center',
       paddingVertical: 10,
       paddingHorizontal: 12,
       borderRadius: Radius.md,
-      backgroundColor: '#FFF',
+      backgroundColor: themeColors.surface,
       marginRight: 8,
       minWidth: 44,
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
       ...Shadows.sm,
     },
-    dayCardSelected: { backgroundColor: '#0F172A' },
-    dayName: { fontSize: 11, fontWeight: '600', color: '#6B7280', marginBottom: 2 },
-    dayNum: { fontSize: 15, fontWeight: '800', color: '#111827' },
+    dayCardSelected: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+    dayName: { fontSize: 11, fontWeight: '600', color: themeColors.textSecondary, marginBottom: 2 },
+    dayNum: { fontSize: 15, fontWeight: '800', color: themeColors.textPrimary },
     dayTextSelected: { color: '#FFF' },
 
     agendaList: { paddingHorizontal: Spacing.lg, paddingBottom: 40 },
@@ -523,16 +541,18 @@ const getStyles = (themeColors) =>
       marginRight: Spacing.sm,
       paddingTop: 6,
     },
-    timeStart: { fontSize: 13, fontWeight: '700', color: '#111827' },
-    timeEnd: { fontSize: 11, color: '#6B7280' },
+    timeStart: { fontSize: 13, fontWeight: '700', color: themeColors.textPrimary },
+    timeEnd: { fontSize: 11, color: themeColors.textSecondary },
 
     sessionCard: {
       flex: 1,
-      backgroundColor: '#FFF',
+      backgroundColor: themeColors.surface,
       borderRadius: Radius.lg,
       padding: Spacing.md,
       borderLeftWidth: 4,
       borderLeftColor: '#4F46E5',
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
       ...Shadows.sm,
     },
     sessionHeaderRow: {
@@ -551,23 +571,23 @@ const getStyles = (themeColors) =>
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: '#EEF2FF',
+      backgroundColor: themeColors.borderLight,
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: Spacing.sm,
     },
-    studentName: { fontSize: 15, fontWeight: '700', color: '#111827' },
+    studentName: { fontSize: 15, fontWeight: '700', color: themeColors.textPrimary },
     offerBadgeContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#F3F4F6',
+      backgroundColor: themeColors.borderLight,
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,
       alignSelf: 'flex-start',
       marginTop: 2,
     },
-    offerBadgeText: { fontSize: 11, fontWeight: '600', color: '#4B5563' },
+    offerBadgeText: { fontSize: 11, fontWeight: '600', color: themeColors.textSecondary },
 
     badge: {
       paddingHorizontal: 8,
@@ -580,21 +600,21 @@ const getStyles = (themeColors) =>
       marginTop: 4,
       paddingTop: 6,
       borderTopWidth: 1,
-      borderTopColor: '#F3F4F6',
+      borderTopColor: themeColors.borderLight,
     },
     metaItem: {
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 3,
     },
-    metaText: { fontSize: 12, color: '#4B5563' },
+    metaText: { fontSize: 12, color: themeColors.textSecondary },
 
     rollCallBtn: {
       marginTop: 10,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#EEF2FF',
+      backgroundColor: themeColors.borderLight,
       paddingVertical: 8,
       borderRadius: Radius.md,
     },
@@ -609,7 +629,7 @@ const getStyles = (themeColors) =>
       paddingHorizontal: Spacing.lg,
     },
     modalCard: {
-      backgroundColor: '#FFF',
+      backgroundColor: themeColors.surface,
       borderRadius: Radius.lg,
       padding: Spacing.lg,
       width: '100%',
@@ -619,9 +639,9 @@ const getStyles = (themeColors) =>
       alignItems: 'center',
       marginBottom: Spacing.md,
     },
-    modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+    modalTitle: { fontSize: 17, fontWeight: '700', color: themeColors.textPrimary },
     modalDetailsBox: {
-      backgroundColor: '#F9FAFB',
+      backgroundColor: themeColors.background,
       borderRadius: Radius.md,
       padding: Spacing.md,
       marginBottom: Spacing.lg,
@@ -632,8 +652,8 @@ const getStyles = (themeColors) =>
       alignItems: 'center',
       paddingVertical: 4,
     },
-    detailLabel: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
-    detailValue: { fontSize: 13, color: '#111827', fontWeight: '600' },
+    detailLabel: { fontSize: 13, color: themeColors.textSecondary, fontWeight: '500' },
+    detailValue: { fontSize: 13, color: themeColors.textPrimary, fontWeight: '600' },
 
     noticeBox: {
       flexDirection: 'row',
@@ -648,7 +668,7 @@ const getStyles = (themeColors) =>
     rollCallSection: {
       marginTop: 12,
       borderTopWidth: 1,
-      borderTopColor: '#E5E7EB',
+      borderTopColor: themeColors.borderLight,
       paddingTop: 12,
     },
     rollCallHeader: {
@@ -660,7 +680,7 @@ const getStyles = (themeColors) =>
     rollCallTitle: {
       fontSize: 14,
       fontWeight: '700',
-      color: '#1F2937',
+      color: themeColors.textPrimary,
     },
     selectAllText: {
       fontSize: 12,
@@ -669,7 +689,7 @@ const getStyles = (themeColors) =>
     },
     emptyStudentsText: {
       fontSize: 13,
-      color: '#6B7280',
+      color: themeColors.textSecondary,
       fontStyle: 'italic',
       textAlign: 'center',
       marginVertical: 10,
@@ -677,25 +697,25 @@ const getStyles = (themeColors) =>
     studentRowItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#F9FAFB',
+      backgroundColor: themeColors.background,
       borderWidth: 1,
-      borderColor: '#E5E7EB',
+      borderColor: themeColors.borderLight,
       borderRadius: Radius.md,
       padding: 10,
       marginBottom: 8,
     },
     studentRowItemActive: {
-      backgroundColor: '#F0FDF4',
-      borderColor: '#BBF7D0',
+      backgroundColor: themeColors.surface,
+      borderColor: themeColors.primary,
     },
     studentRowName: {
       fontSize: 14,
       fontWeight: '700',
-      color: '#111827',
+      color: themeColors.textPrimary,
     },
     studentRowOffer: {
       fontSize: 11,
-      color: '#6B7280',
+      color: themeColors.textSecondary,
     },
     presenceBadge: {
       paddingHorizontal: 8,

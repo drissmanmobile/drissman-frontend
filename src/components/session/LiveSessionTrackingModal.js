@@ -16,6 +16,7 @@ import {
   fetchSessionTrail,
   startInstructorSessionTracking,
   stopInstructorSessionTracking,
+  isInstructorTrackingActive,
 } from '../../services/sessionTrackingService'
 
 export default function LiveSessionTrackingModal({ visible, onClose, session, isInstructor }) {
@@ -28,16 +29,20 @@ export default function LiveSessionTrackingModal({ visible, onClose, session, is
   const [isTrackingActive, setIsTrackingActive] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const targetSessionId = session?.id || session?.sessionId
+
   useEffect(() => {
     let intervalId = null
 
-    if (visible && session?.id) {
+    if (visible && targetSessionId) {
+      if (isInstructor) {
+        setIsTrackingActive(isInstructorTrackingActive(targetSessionId))
+      }
       loadData()
-      // Polling de la position toutes les 5 secondes pour l'élève ou le moniteur
+      // Polling de la position toutes les 5 secondes
       intervalId = setInterval(loadData, 5000)
     } else {
-      stopInstructorSessionTracking()
-      setIsTrackingActive(false)
+      setLoading(false)
     }
 
     return () => {
@@ -46,11 +51,14 @@ export default function LiveSessionTrackingModal({ visible, onClose, session, is
   }, [visible, session])
 
   const loadData = async () => {
-    if (!session?.id) return
+    if (!targetSessionId) {
+      setLoading(false)
+      return
+    }
     try {
       const [latest, trailData] = await Promise.all([
-        fetchLiveSessionLocation(session.id).catch(() => null),
-        fetchSessionTrail(session.id).catch(() => []),
+        fetchLiveSessionLocation(targetSessionId).catch(() => null),
+        fetchSessionTrail(targetSessionId).catch(() => []),
       ])
 
       if (latest && latest.latitude && latest.longitude) {
@@ -72,11 +80,12 @@ export default function LiveSessionTrackingModal({ visible, onClose, session, is
   }
 
   const toggleInstructorTracking = async () => {
+    if (!targetSessionId) return
     if (isTrackingActive) {
       stopInstructorSessionTracking()
       setIsTrackingActive(false)
     } else {
-      const watcher = await startInstructorSessionTracking(session.id, (err) => alert(err))
+      const watcher = await startInstructorSessionTracking(targetSessionId, (err) => alert(err))
       if (watcher) {
         setIsTrackingActive(true)
         loadData()
@@ -168,7 +177,11 @@ export default function LiveSessionTrackingModal({ visible, onClose, session, is
                 <View style={styles.noGpsBanner}>
                   <Ionicons name="location-outline" size={20} color="#D97706" style={{ marginRight: 8 }} />
                   <Text style={styles.noGpsText}>
-                    Signal GPS en attente. Le moniteur n'a pas encore démarré la transmission GPS pour ce cours.
+                    {isInstructor
+                      ? (isTrackingActive
+                          ? "Transmission GPS activée. Recherche de votre position GPS en cours..."
+                          : "Appuyez sur 'Démarrer la transmission GPS' ci-dessous pour partager votre position en direct.")
+                      : "Signal GPS en attente. Le moniteur n'a pas encore démarré la transmission GPS pour ce cours."}
                   </Text>
                 </View>
               )}

@@ -196,6 +196,14 @@ export async function deleteAdminModule(id) {
   return api.delete(`/api/modules/${id}`)
 }
 
+export async function getOfferModules(offerId) {
+  return api.get(`/api/offers/${offerId}/modules`)
+}
+
+export async function setOfferModules(offerId, modulesList) {
+  return api.put(`/api/schools/admin/offers/${offerId}/modules`, { modules: modulesList })
+}
+
 // Vehicles
 export async function getAdminVehicles() {
   return api.get('/api/schools/admin/vehicles')

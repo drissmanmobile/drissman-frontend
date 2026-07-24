@@ -15,7 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSideMenu } from '../../context/SideMenuContext';
-import { getStudentEnrollments, getStudentSessions } from '../../services/services';
+import api from '../../services/api';
 import { Typography, Spacing, Radius, Shadows } from '../../utils/theme';
 
 export function StudentProgressScreen() {
@@ -28,6 +28,7 @@ export function StudentProgressScreen() {
 
   const [enrollments, setEnrollments] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [backendModules, setBackendModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedModule, setExpandedModule] = useState(null);
@@ -37,12 +38,14 @@ export function StudentProgressScreen() {
     else setLoading(true);
 
     try {
-      const [enrollData, sessionData] = await Promise.all([
+      const [enrollData, sessionData, modulesRes] = await Promise.all([
         getStudentEnrollments(user?.id),
-        getStudentSessions(user?.id)
+        getStudentSessions(user?.id),
+        api.get('/api/modules').catch(() => [])
       ]);
       setEnrollments(Array.isArray(enrollData) ? enrollData : []);
       setSessions(Array.isArray(sessionData) ? sessionData : []);
+      setBackendModules(Array.isArray(modulesRes) ? modulesRes : []);
     } catch (e) {
       console.log('Error fetching progress data:', e);
     } finally {
@@ -70,48 +73,30 @@ export function StudentProgressScreen() {
   const upcomingSessions = (sessions || []).filter(s => s.status !== 'COMPLETED' && s.status !== 'CANCELLED');
   const nextSession = upcomingSessions[0];
 
-  // Dynamic module hours based on total purchased offer hours (e.g. 30h, 20h, etc.)
-  const targetTotal = totalPurchasedHours > 0 ? totalPurchasedHours : 20;
-  const m1Hours = Math.max(1, Math.round(targetTotal * 0.3));
-  const m2Hours = Math.max(1, Math.round(targetTotal * 0.4));
-  const m3Hours = Math.max(1, Math.round(targetTotal * 0.2));
-  const m4Hours = Math.max(1, targetTotal - (m1Hours + m2Hours + m3Hours));
+  // Filter real backend modules for student's active offer (if any)
+  const activeOfferId = enrollments[0]?.offerId;
 
-  // Competency Modules list
-  const modules = [
-    {
-      id: 'm1',
-      title: 'Module 1 : Maîtrise du véhicule',
-      subtitle: 'Poste de conduite, volant, démarrage & changement de vitesses',
-      icon: 'car-sport-outline',
-      requiredHours: m1Hours,
-      completedHours: Math.min(m1Hours, totalConsumedHours),
-    },
-    {
-      id: 'm2',
-      title: 'Module 2 : Signalisation & Circulation',
-      subtitle: 'Intersections, priorités, ronds-points & insertion',
-      icon: 'map-outline',
-      requiredHours: m2Hours,
-      completedHours: Math.max(0, Math.min(m2Hours, totalConsumedHours - m1Hours)),
-    },
-    {
-      id: 'm3',
-      title: 'Module 3 : Manœuvres & Autonomie',
-      subtitle: 'Créneaux, stationnement, demi-tour & conduite de nuit/pluie',
-      icon: 'navigate-outline',
-      requiredHours: m3Hours,
-      completedHours: Math.max(0, Math.min(m3Hours, totalConsumedHours - (m1Hours + m2Hours))),
-    },
-    {
-      id: 'm4',
-      title: 'Module 4 : Préparation à l’Examen Blanc',
-      subtitle: 'Parcours autonome, questions de sécurité & bilan d’aptitude',
-      icon: 'trophy-outline',
-      requiredHours: m4Hours,
-      completedHours: Math.max(0, Math.min(m4Hours, totalConsumedHours - (m1Hours + m2Hours + m3Hours))),
-    },
-  ];
+  const filteredBackendModules = backendModules.filter(mod => {
+    if (!mod.offerId) return true; // Modules globaux
+    if (activeOfferId) return mod.offerId === activeOfferId;
+    return true;
+  });
+
+  const modules = filteredBackendModules.map((mod, idx) => {
+    const req = mod.requiredHours || 1;
+    const compForMod = completedSessions.filter(s => String(s.moduleId) === String(mod.id)).length * 2;
+    const estCompleted = compForMod > 0 ? compForMod : 0;
+    return {
+      id: mod.id || `mod_${idx}`,
+      title: mod.name || `Module ${idx + 1}`,
+      subtitle: mod.description || (mod.category === 'PRACTICAL' ? 'Pratique' : 'Théorie'),
+      icon: mod.category === 'PRACTICAL' ? 'car-outline' : 'book-outline',
+      requiredHours: req,
+      completedHours: Math.min(req, Math.max(0, estCompleted)),
+    };
+  });
+
+
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>

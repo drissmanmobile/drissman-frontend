@@ -8,20 +8,25 @@ import Constants from 'expo-constants'
 import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 
-const LOCAL_LAN_IP = '172.18.204.63'
+const LOCAL_LAN_IP = '10.66.131.63'
 
 const getDynamicBaseUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL
-  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
-    return envUrl
-  }
+  const hostUri = Constants.expoConfig?.hostUri || 
+                  Constants.manifest?.debuggerHost || 
+                  Constants.manifest2?.extra?.expoGo?.developer?.extra?.hostUri ||
+                  Constants.linkingUri
 
-  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost
   if (hostUri) {
-    const hostIp = hostUri.split(':')[0]
+    const cleanHost = hostUri.replace(/^https?:\/\//, '').replace(/\/.*/, '')
+    const hostIp = cleanHost.split(':')[0]
     if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
       return `http://${hostIp}:8080`
     }
+  }
+
+  const envUrl = process.env.EXPO_PUBLIC_API_URL
+  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
+    return envUrl
   }
 
   if (Platform.OS === 'android' && !Device.isDevice) {
@@ -55,7 +60,7 @@ api.interceptors.request.use(async (config) => {
     const targetUrl = config.baseURL || BASE_URL
     const isLocalServer = targetUrl.includes('localhost') || 
                           targetUrl.includes('127.0.0.1') || 
-                          targetUrl.includes('10.0.2.2') || 
+                          targetUrl.includes('10.') || 
                           targetUrl.includes('172.18.') || 
                           targetUrl.includes('192.168.')
 

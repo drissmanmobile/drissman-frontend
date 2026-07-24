@@ -14,7 +14,6 @@ export default function StudentDocumentsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ADMIN'); // 'ADMIN' or 'PEDAGO'
   
-  // Mock documents for demonstration
   const [documents, setDocuments] = useState([]);
 
   const fetchDocuments = useCallback(async () => {

@@ -45,11 +45,25 @@ export default function StudentMessagesScreen() {
       if (Array.isArray(data)) {
         setContacts(data)
         if (monitorId) {
-          const match = data.find((c) => c.userId === monitorId || c.monitorId === monitorId)
-          if (match) setActiveContact(match)
+          const match = data.find((c) => 
+            String(c.userId) === String(monitorId) || 
+            String(c.monitorId) === String(monitorId) || 
+            String(c.id) === String(monitorId)
+          )
+          if (match) {
+            setActiveContact(match)
+          } else if (!activeContact) {
+            setActiveContact({
+              userId: monitorId,
+              name: monitorName || 'Moniteur',
+              offerName: 'Moniteur d\'auto-école'
+            })
+          }
         } else if (monitorName && !activeContact) {
           const match = data.find((c) => c.name === monitorName)
-          if (match) setActiveContact(match)
+          if (match) {
+            setActiveContact(match)
+          }
         }
       }
     } catch (e) {
@@ -82,12 +96,19 @@ export default function StudentMessagesScreen() {
     }
   }
 
+  const getPartnerId = (contact) => {
+    if (!contact) return null
+    return contact.userId || contact.monitorId || contact.id || contact.senderId
+  }
+
+  const currentPartnerId = getPartnerId(activeContact)
+
   useEffect(() => {
     let interval = null
-    if (activeContact?.userId) {
-      loadMessages(activeContact.userId)
+    if (currentPartnerId) {
+      loadMessages(currentPartnerId)
       interval = setInterval(() => {
-        getChatMessages(activeContact.userId)
+        getChatMessages(currentPartnerId)
           .then((data) => {
             if (Array.isArray(data)) setMessages(data)
           })
@@ -100,7 +121,7 @@ export default function StudentMessagesScreen() {
   }, [activeContact])
 
   const handleSend = async () => {
-    if (!inputText.trim() || !activeContact?.userId || sending) return
+    if (!inputText.trim() || !currentPartnerId || sending) return
     const textToSend = inputText.trim()
     setInputText('')
     setSending(true)
@@ -108,7 +129,7 @@ export default function StudentMessagesScreen() {
     const tempMsg = {
       id: 'temp_' + Date.now(),
       senderId: 'me',
-      recipientId: activeContact.userId,
+      recipientId: currentPartnerId,
       content: textToSend,
       isMe: true,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -117,7 +138,7 @@ export default function StudentMessagesScreen() {
     setMessages((prev) => [...prev, tempMsg])
 
     try {
-      const savedMsg = await sendChatMessage(activeContact.userId, textToSend, activeContact.offerId)
+      const savedMsg = await sendChatMessage(currentPartnerId, textToSend, activeContact?.offerId)
       if (savedMsg) {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempMsg.id ? { ...savedMsg, isMe: true } : m))

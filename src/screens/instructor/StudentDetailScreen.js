@@ -23,27 +23,20 @@ export default function StudentDetailScreen() {
 
   const [activeSubTab, setActiveSubTab] = useState('APERÇU')
 
-  // Fallback defaults matching Martin Paul mockup if student details are incomplete
   const studentData = {
-    name: student?.studentName || 'Martin Paul',
-    phone: student?.phone || '691 23 45 67',
-    email: student?.email || 'martinpaul@gmail.com',
+    name: student?.studentName || student?.name || 'Élève',
+    phone: student?.phone || 'Non renseigné',
+    email: student?.email || 'Non renseigné',
     status: student?.status || 'ACTIVE',
-    offerName: student?.offerName || 'Pack Permis B Complet',
-    hoursPurchased: student?.hoursPurchased || 20,
-    hoursConsumed: student?.hoursConsumed || 12,
-    pendingLessons: student?.pendingLessons !== undefined ? student?.pendingLessons : 2,
+    offerName: student?.offerName || 'Permis de conduire',
+    hoursPurchased: student?.hoursPurchased || student?.hours || 0,
+    hoursConsumed: student?.hoursConsumed || 0,
+    pendingLessons: student?.pendingLessons !== undefined ? student?.pendingLessons : 0,
     progressPercent:
       student?.hoursPurchased && student?.hoursConsumed
         ? Math.round((student.hoursConsumed / student.hoursPurchased) * 100)
-        : student?.progressPercent || 85,
-    lessons: student?.lessons && student.lessons.length > 0
-      ? student.lessons
-      : [
-          { id: 'l1', date: '19 Mai', title: 'Conduite en ville', time: '08:00 - 09:30', status: 'COMPLETED' },
-          { id: 'l2', date: '17 Mai', title: 'Manœuvres', time: '10:00 - 11:30', status: 'COMPLETED' },
-          { id: 'l3', date: '15 Mai', title: 'Conduite sur route', time: '13:00 - 14:30', status: 'COMPLETED' },
-        ],
+        : (student?.progressPercent || 0),
+    lessons: student?.lessons || [],
   }
 
   const handleSendMessage = () => {

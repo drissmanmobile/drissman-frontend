@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { Modal, EmptyState, Badge } from '../../components/ui/index'
 import * as DocumentPicker from 'expo-document-picker'
-import { getAdminModules, getModuleDocuments, uploadDocument, createAdminModule, updateAdminModule, deleteAdminModule } from '../../services/services'
+import { getAdminModules, getModuleDocuments, uploadDocument, createAdminModule, updateAdminModule, deleteAdminModule, getAdminOffers, setOfferModules, getOfferModules } from '../../services/services'
 import { Ionicons } from '@expo/vector-icons'
 
 
@@ -29,6 +29,8 @@ export default function AdminModulesScreen({ navigation }) {
   const { t } = useTranslation()
   const { user } = useAuth()
   const [modules, setModules] = useState([])
+  const [offers, setOffers] = useState([])
+  const [selectedOfferFilter, setSelectedOfferFilter] = useState('ALL')
   const [loading, setLoading] = useState(true)
   
   // Documents state
@@ -44,23 +46,33 @@ export default function AdminModulesScreen({ navigation }) {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('THEORY')
   const [requiredHours, setRequiredHours] = useState('1')
+  const [targetOfferId, setTargetOfferId] = useState('ALL')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    loadModules()
+    loadData()
   }, [])
 
-  async function loadModules() {
+  async function loadData() {
     try {
       setLoading(true)
-      const data = await getAdminModules()
-      setModules(data)
+      const [modulesData, offersData] = await Promise.all([
+        getAdminModules(),
+        getAdminOffers().catch(() => [])
+      ])
+      setModules(Array.isArray(modulesData) ? modulesData : [])
+      setOffers(Array.isArray(offersData) ? offersData : [])
     } catch (err) {
       Alert.alert(t('schools.err_title'), t('admin_modules.err_load'))
     } finally {
       setLoading(false)
     }
   }
+
+  async function loadModules() {
+    await loadData()
+  }
+
 
   async function handleViewDocuments(moduleItem) {
     setSelectedModuleDocs(moduleItem)
@@ -119,6 +131,7 @@ export default function AdminModulesScreen({ navigation }) {
     setDescription('')
     setCategory('THEORY')
     setRequiredHours('1')
+    setTargetOfferId(selectedOfferFilter !== 'ALL' ? selectedOfferFilter : 'ALL')
     setModuleModalVisible(true)
   }
 
@@ -128,6 +141,7 @@ export default function AdminModulesScreen({ navigation }) {
     setDescription(mod.description)
     setCategory(mod.category)
     setRequiredHours(mod.requiredHours?.toString() || '1')
+    setTargetOfferId(mod.offerId || 'ALL')
     setModuleModalVisible(true)
   }
 
@@ -139,20 +153,42 @@ export default function AdminModulesScreen({ navigation }) {
     
     try {
       setSaving(true)
+      const selectedOffer = offers.find(o => o.id === targetOfferId)
+      const offerSuffix = selectedOffer ? ` (${selectedOffer.permitType || selectedOffer.name})` : ''
+
       const payload = {
-        name,
+        name: name.includes('(') ? name : `${name}${offerSuffix}`,
         description,
         category,
-        requiredHours: parseInt(requiredHours, 10) || 1
+        requiredHours: parseInt(requiredHours, 10) || 1,
+        offerId: targetOfferId !== 'ALL' ? targetOfferId : null
       }
       
+      let savedMod = null
       if (editingModule) {
-        await updateAdminModule(editingModule.id, payload)
+        savedMod = await updateAdminModule(editingModule.id, payload)
         Alert.alert(t('schools.success_title', 'Succès'), 'Module mis à jour.')
       } else {
-        await createAdminModule(payload)
+        savedMod = await createAdminModule(payload)
         Alert.alert(t('schools.success_title', 'Succès'), 'Module créé.')
       }
+
+      if (targetOfferId && targetOfferId !== 'ALL' && savedMod?.id) {
+        try {
+          const currentOfferMods = await getOfferModules(targetOfferId).catch(() => [])
+          const existingList = Array.isArray(currentOfferMods) 
+            ? currentOfferMods.map((m, idx) => ({ moduleId: m.moduleId || m.id, orderIndex: idx }))
+            : []
+          
+          if (!existingList.some(m => m.moduleId === savedMod.id)) {
+            existingList.push({ moduleId: savedMod.id, orderIndex: existingList.length })
+            await setOfferModules(targetOfferId, existingList)
+          }
+        } catch (e) {
+          console.log('Error linking module to offer:', e)
+        }
+      }
+
       setModuleModalVisible(false)
       loadModules()
     } catch (err) {
@@ -161,6 +197,7 @@ export default function AdminModulesScreen({ navigation }) {
       setSaving(false)
     }
   }
+
 
   function handleDeleteModule(id) {
     Alert.alert('Supprimer', 'Voulez-vous vraiment supprimer ce module ?', [
@@ -181,6 +218,11 @@ export default function AdminModulesScreen({ navigation }) {
     ])
   }
 
+  const filteredModules = modules.filter(m => {
+    if (selectedOfferFilter === 'ALL') return true;
+    return m.offerId === selectedOfferFilter || (m.name && m.name.toLowerCase().includes(selectedOfferFilter.toLowerCase()));
+  });
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
@@ -198,38 +240,76 @@ export default function AdminModulesScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Barres de filtres par Offres */}
+      <View style={{ paddingHorizontal: Spacing.md, marginVertical: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <TouchableOpacity 
+            style={[styles.chip, selectedOfferFilter === 'ALL' && styles.chipActive]} 
+            onPress={() => setSelectedOfferFilter('ALL')}
+          >
+            <Text style={[styles.chipText, selectedOfferFilter === 'ALL' && styles.chipTextActive]}>
+              Toutes les offres
+            </Text>
+          </TouchableOpacity>
+          {offers.map(off => (
+            <TouchableOpacity 
+              key={off.id} 
+              style={[styles.chip, selectedOfferFilter === off.id && styles.chipActive]} 
+              onPress={() => setSelectedOfferFilter(off.id)}
+            >
+              <Text style={[styles.chipText, selectedOfferFilter === off.id && styles.chipTextActive]}>
+                {off.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={themeColors.primary} />
       ) : (
         <FlatList
-          data={modules}
+          data={filteredModules}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={[styles.card, Shadows.sm]}>
-              <View style={styles.cardContent}>
-                <Text style={styles.moduleName}>{item.name}</Text>
-                <Text style={styles.moduleCategory}>
-                  {item.category === 'THEORY' ? t('admin_modules.theory') : t('admin_modules.practical')}
-                </Text>
-                <Text style={styles.moduleDesc}>{item.description}</Text>
-                <Text style={styles.moduleMeta}>
-                  {item.requiredHours} {t('admin_modules.hours_req')}
-                </Text>
+          renderItem={({ item }) => {
+            const linkedOffer = offers.find(o => o.id === item.offerId);
+            return (
+              <View style={[styles.card, Shadows.sm]}>
+                <View style={styles.cardContent}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={styles.moduleName}>{item.name}</Text>
+                    {linkedOffer ? (
+                      <View style={{ backgroundColor: themeColors.primary + '15', paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: themeColors.primary }}>
+                          Permis {linkedOffer.permitType || 'B'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.moduleCategory}>
+                    {item.category === 'THEORY' ? t('admin_modules.theory') : t('admin_modules.practical')}
+                  </Text>
+                  <Text style={styles.moduleDesc}>{item.description}</Text>
+                  <Text style={styles.moduleMeta}>
+                    {item.requiredHours} {t('admin_modules.hours_req')}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity onPress={() => handleViewDocuments(item)} style={[styles.docsBtn, { flex: 1 }]}>
+                    <Text style={styles.docsBtnText}><Ionicons name="folder-outline" size={14} color={themeColors.primary} /> {t('admin_modules.btn_docs')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editBtn}>
+                    <Ionicons name="pencil" size={18} color={themeColors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteModule(item.id)} style={styles.deleteBtn}>
+                    <Ionicons name="trash" size={18} color={themeColors.error} />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                <TouchableOpacity onPress={() => handleViewDocuments(item)} style={[styles.docsBtn, { flex: 1 }]}>
-                  <Text style={styles.docsBtnText}><Ionicons name="folder-outline" size={14} color={themeColors.primary} /> {t('admin_modules.btn_docs')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editBtn}>
-                  <Ionicons name="pencil" size={18} color={themeColors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteModule(item.id)} style={styles.deleteBtn}>
-                  <Ionicons name="trash" size={18} color={themeColors.error} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+            );
+          }}
           ListEmptyComponent={<EmptyState message={t('admin_modules.empty')} icon={<Ionicons name="book-outline" size={48} color={themeColors.textSecondary} />} />}
         />
       )}
@@ -283,14 +363,39 @@ export default function AdminModulesScreen({ navigation }) {
       <Modal
         isVisible={moduleModalVisible}
         onClose={() => setModuleModalVisible(false)}
-        title={editingModule ? 'Modifier le Module' : 'Créer un Module'}
+        title={editingModule ? 'Modifier le Module' : 'Créer un Module par Offre'}
       >
-        <ScrollView style={{ maxHeight: 400 }}>
+        <ScrollView style={{ maxHeight: 450 }}>
+          <Text style={styles.label}>Offre de Formation (Permis) *</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginVertical: 4 }}>
+            <TouchableOpacity 
+              onPress={() => setTargetOfferId('ALL')} 
+              style={[styles.chip, targetOfferId === 'ALL' && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, targetOfferId === 'ALL' && styles.chipTextActive]}>
+                Toutes les offres
+              </Text>
+            </TouchableOpacity>
+            {offers.map(off => (
+              <TouchableOpacity 
+                key={off.id} 
+                onPress={() => setTargetOfferId(off.id)} 
+                style={[styles.chip, targetOfferId === off.id && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, targetOfferId === off.id && styles.chipTextActive]}>
+                  {off.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           <Text style={styles.label}>Nom du module *</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Ex: Code de la Route" />
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Ex: Maîtrise du véhicule ou Réglementation" />
+
 
           <Text style={styles.label}>Description</Text>
-          <TextInput value={description} onChangeText={setDescription} style={[styles.input, { height: 60 }]} placeholder="Détails du module..." multiline />
+          <TextInput value={description} onChangeText={setDescription} style={[styles.input, { height: 60 }]} placeholder="Détails des compétences visées..." multiline />
+
 
           <Text style={styles.label}>Catégorie</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>

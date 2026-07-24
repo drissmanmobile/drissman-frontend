@@ -16,6 +16,9 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSideMenu } from '../../context/SideMenuContext'
 import { getInstructorSchedule, getChatContacts } from '../../services/services'
+import api from '../../services/api'
+import LiveSessionTrackingModal from '../../components/session/LiveSessionTrackingModal'
+import { getActiveTrackingSessionId } from '../../services/sessionTrackingService'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { formatDate } from '../../utils/formatters'
 
@@ -30,26 +33,48 @@ export default function InstructorDashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [trackingSession, setTrackingSession] = useState(null)
 
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
         setLoading(true)
         try {
-          const [sessionsData, contactsData] = await Promise.allSettled([
+          const [sessionsData, contactsData, notifsRes] = await Promise.allSettled([
             getInstructorSchedule(user?.id),
             getChatContacts(),
+            api.get('/api/notifications')
           ])
 
+          let sched = []
           if (sessionsData.status === 'fulfilled') {
-            setSessions(sessionsData.value || [])
+            sched = sessionsData.value || []
+            setSessions(sched)
           }
+
+          let unreadMsg = 0
           if (contactsData.status === 'fulfilled' && Array.isArray(contactsData.value)) {
-            const totalUnread = contactsData.value.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
-            setUnreadCount(totalUnread)
-          } else {
-            setUnreadCount(0)
+            unreadMsg = contactsData.value.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
           }
+
+          let unreadNotifs = 0
+          if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)) {
+            unreadNotifs = notifsRes.value.filter(n => !n.read).length
+          }
+
+          const now = new Date()
+          const year = now.getFullYear()
+          const month = String(now.getMonth() + 1).padStart(2, '0')
+          const day = String(now.getDate()).padStart(2, '0')
+          const todayStr = `${year}-${month}-${day}`
+          
+          const pendingTodayCount = sched.filter(s => {
+            const dateStr = s.date?.includes('T') ? s.date.split('T')[0] : s.date
+            return dateStr === todayStr && s.status !== 'COMPLETED' && s.status !== 'CANCELLED'
+          }).length
+
+          const totalBadge = unreadNotifs + unreadMsg
+          setUnreadCount(totalBadge)
         } catch (e) {
           console.log('Error fetching instructor schedule:', e)
           setUnreadCount(0)
@@ -141,17 +166,45 @@ export default function InstructorDashboardScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.greetingContainer}>
-          <Text style={styles.greetingText}>Bonjour,</Text>
+          <Text style={styles.greetingText}>{t('dashboard.greeting', 'Bonjour,')}</Text>
           <Text style={styles.userName}>M. {user?.lastName || 'Moniteur'} {user?.firstName || ''}👋</Text>
-          <Text style={styles.userRole}>Moniteur - Auto-école</Text>
+          <Text style={styles.userRole}>{t('dashboard.instructor_role', 'Moniteur - Auto-école')}</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Banner Suivi GPS actif en arrière-plan */}
+        {getActiveTrackingSessionId() ? (
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#16A34A',
+              paddingHorizontal: Spacing.md,
+              paddingVertical: 10,
+              marginBottom: Spacing.md,
+              borderRadius: Radius.md,
+            }}
+            onPress={() => {
+              const activeId = getActiveTrackingSessionId()
+              const sess = sessions.find(s => s.id === activeId) || nextLesson || { id: activeId }
+              setTrackingSession(sess)
+            }}
+          >
+            <Ionicons name="radio-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={{ color: '#FFF', fontWeight: '700', flex: 1, fontSize: 13 }}>
+              Transmission GPS en direct active
+            </Text>
+            <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 12, textDecorationLine: 'underline' }}>
+              Afficher la carte
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Aperçu du jour */}
         <View style={styles.overviewCard}>
           <View style={styles.overviewHeader}>
-            <Text style={styles.overviewTitle}>Aperçu du jour</Text>
+            <Text style={styles.overviewTitle}>{t('dashboard.today_overview', 'Aperçu du jour')}</Text>
             <View style={styles.dateBadge}>
               <Ionicons name="calendar-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
               <Text style={styles.dateBadgeText}>{formatDate(todayStr)}</Text>
@@ -161,22 +214,22 @@ export default function InstructorDashboardScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{loading ? '-' : plannedLessons}</Text>
-              <Text style={styles.statLabel}>Leçons{'\n'}prévues</Text>
+              <Text style={styles.statLabel}>{t('dashboard.planned_lessons', 'Leçons\nprévues')}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{loading ? '-' : completedLessons}</Text>
-              <Text style={styles.statLabel}>Leçons{'\n'}terminées</Text>
+              <Text style={styles.statLabel}>{t('dashboard.completed_lessons', 'Leçons\nterminées')}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{loading ? '-' : absences}</Text>
-              <Text style={styles.statLabel}>Absence</Text>
+              <Text style={styles.statLabel}>{t('dashboard.absence', 'Absence')}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{loading ? '-' : drivingHours}h</Text>
-              <Text style={styles.statLabel}>Heures de{'\n'}conduite</Text>
+              <Text style={styles.statLabel}>{t('dashboard.driving_hours', 'Heures de\nconduite')}</Text>
             </View>
           </View>
         </View>
@@ -192,13 +245,13 @@ export default function InstructorDashboardScreen() {
               <View style={[styles.tileIconContainer, { backgroundColor: tile.bgColor }]}>
                 <Ionicons name={tile.icon} size={28} color={tile.iconColor} />
               </View>
-              <Text style={styles.tileTitle}>{tile.title}</Text>
+              <Text style={styles.tileTitle}>{t(`dashboard.tile_${tile.id}`, tile.title)}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Prochaine Leçon */}
-        <Text style={styles.sectionTitle}>Prochaine leçon</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.next_lesson', 'Prochaine leçon')}</Text>
         {loading ? (
           <ActivityIndicator color={themeColors.primary} style={{ marginTop: 20 }} />
         ) : nextLesson ? (
@@ -217,10 +270,26 @@ export default function InstructorDashboardScreen() {
                   </Text>
                 </View>
                 <Text style={styles.lessonType}>{nextLesson.offerName || 'Conduite'}</Text>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#2563EB',
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: Radius.md,
+                    marginTop: 8,
+                    alignSelf: 'flex-start',
+                  }}
+                  onPress={() => setTrackingSession(nextLesson)}
+                >
+                  <Ionicons name="navigate-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Suivi GPS & Carte Map</Text>
+                </TouchableOpacity>
               </View>
               <View style={styles.statusBadge}>
                 <Text style={styles.statusText}>
-                  {nextLesson.status === 'IN_PROGRESS' ? 'En cours' : 'À venir'}
+                  {nextLesson.status === 'IN_PROGRESS' ? t('dashboard.in_progress', 'En cours') : t('dashboard.upcoming', 'À venir')}
                 </Text>
               </View>
             </View>
@@ -228,22 +297,31 @@ export default function InstructorDashboardScreen() {
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyCardText}>
-              {plannedLessons > 0 ? "Toutes les leçons d'aujourd'hui sont terminées." : "Aucune leçon prévue aujourd'hui."}
+              {plannedLessons > 0 
+                ? t('dashboard.all_completed_today', "Toutes les leçons d'aujourd'hui sont terminées.") 
+                : t('dashboard.no_lessons_today', "Aucune leçon prévue aujourd'hui.")}
             </Text>
           </View>
         )}
       </ScrollView>
+
+      <LiveSessionTrackingModal
+        visible={!!trackingSession}
+        onClose={() => setTrackingSession(null)}
+        session={trackingSession}
+        isInstructor={true}
+      />
     </SafeAreaView>
   )
 }
 
 const getStyles = (themeColors) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  root: { flex: 1, backgroundColor: themeColors.background },
   header: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.md,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: themeColors.background,
   },
   headerTop: {
     flexDirection: 'row',
@@ -287,7 +365,7 @@ const getStyles = (themeColors) => StyleSheet.create({
   userName: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#111827',
+    color: themeColors.textPrimary,
     marginTop: 4,
   },
   userRole: {
@@ -364,7 +442,7 @@ const getStyles = (themeColors) => StyleSheet.create({
   },
   tile: {
     width: '31%',
-    backgroundColor: '#FFF',
+    backgroundColor: themeColors.surface,
     borderRadius: Radius.lg,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
@@ -372,6 +450,8 @@ const getStyles = (themeColors) => StyleSheet.create({
     marginBottom: Spacing.md,
     ...Shadows.sm,
     shadowOpacity: 0.05,
+    borderWidth: 1,
+    borderColor: themeColors.borderLight,
   },
   tileIconContainer: {
     width: 50,
@@ -394,7 +474,7 @@ const getStyles = (themeColors) => StyleSheet.create({
     marginBottom: Spacing.md,
   },
   nextLessonCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: themeColors.surface,
     borderRadius: Radius.xl,
     padding: Spacing.md,
     borderWidth: 1,
@@ -408,7 +488,7 @@ const getStyles = (themeColors) => StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: themeColors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -451,7 +531,7 @@ const getStyles = (themeColors) => StyleSheet.create({
     fontWeight: '700',
   },
   emptyCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: themeColors.surface,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
     alignItems: 'center',

@@ -90,11 +90,14 @@ export default function AdminDashboardScreen({ navigation }) {
   const [docsLoading, setDocsLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
 
-  // Students Modal State
+  // Students & Enrollments Modal State
   const [allStudentsModalVisible, setAllStudentsModalVisible] = useState(false)
   const [offersWithStudents, setOffersWithStudents] = useState([])
+  const [allEnrollmentsList, setAllEnrollmentsList] = useState([])
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [expandedOffer, setExpandedOffer] = useState(null)
+  const [enrollmentTab, setEnrollmentTab] = useState('BY_OFFER') // 'BY_OFFER' | 'PENDING' | 'ALL'
+  const [enrollmentSearchQuery, setEnrollmentSearchQuery] = useState('')
 
   // Pending Enrollments State
   const [pendingModalVisible, setPendingModalVisible] = useState(false)
@@ -135,33 +138,49 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   }
 
-  async function handleOpenAllStudents() {
+  async function handleOpenAllStudents(initialTab = 'BY_OFFER') {
+    setEnrollmentTab(initialTab)
     setAllStudentsModalVisible(true)
     setLoadingStudents(true)
     setExpandedOffer(null)
+    setEnrollmentSearchQuery('')
     try {
       const enrollments = await getAdminEnrollments()
-      const offersMap = {}
+      const list = Array.isArray(enrollments) ? enrollments : []
+      setAllEnrollmentsList(list)
       
-      enrollments.forEach(e => {
-        if (!offersMap[e.offerId]) {
-          offersMap[e.offerId] = {
-            id: e.offerId,
-            name: e.offerName,
+      const offersMap = {}
+      const pendingList = []
+      
+      list.forEach(e => {
+        const offerKey = e.offerId || e.offerName || 'Inscriptions'
+        if (!offersMap[offerKey]) {
+          offersMap[offerKey] = {
+            id: offerKey,
+            name: e.offerName || 'Offre sans nom',
+            price: e.price || 0,
             students: []
           }
         }
-        offersMap[e.offerId].students.push({
+        offersMap[offerKey].students.push({
+          id: e.id,
           studentId: e.studentId,
-          studentName: e.studentName,
-          status: e.status,
-          hoursConsumed: e.hoursConsumed,
-          hours: e.hours,
+          studentName: e.studentName || 'Élève',
+          phone: e.phone || '',
+          email: e.email || '',
+          status: e.status || 'PENDING',
+          hoursConsumed: e.hoursConsumed || 0,
+          hours: e.hours || e.hoursPurchased || 20,
           enrolledAt: e.enrolledAt,
         })
+
+        if (e.status === 'PENDING') {
+          pendingList.push(e)
+        }
       })
       
       setOffersWithStudents(Object.values(offersMap))
+      setPendingEnrollments(pendingList)
     } catch (err) {
       Alert.alert(t('schools.err_title', 'Erreur'), t('admin_dashboard.err_students'))
     } finally {
@@ -170,26 +189,23 @@ export default function AdminDashboardScreen({ navigation }) {
   }
 
   async function handleOpenPendingEnrollments() {
-    setPendingModalVisible(true)
-    setLoadingPending(true)
-    try {
-      const enrollments = await getAdminEnrollments()
-      const pending = enrollments.filter(e => e.status === 'PENDING')
-      setPendingEnrollments(pending)
-    } catch (err) {
-      Alert.alert(t('schools.err_title', 'Erreur'), "Impossible de charger les inscriptions en attente")
-    } finally {
-      setLoadingPending(false)
-    }
+    handleOpenAllStudents('PENDING')
   }
 
   async function handleUpdateEnrollmentStatus(enrollmentId, newStatus) {
     try {
       setUpdatingEnrollmentId(enrollmentId)
       await updateAdminEnrollmentStatus(enrollmentId, newStatus)
-      // Remove from list
+      setAllEnrollmentsList(prev =>
+        prev.map(e => e.id === enrollmentId ? { ...e, status: newStatus } : e)
+      )
+      setOffersWithStudents(prevOffers =>
+        prevOffers.map(offer => ({
+          ...offer,
+          students: offer.students.map(s => s.id === enrollmentId ? { ...s, status: newStatus } : s)
+        }))
+      )
       setPendingEnrollments(prev => prev.filter(e => e.id !== enrollmentId))
-      // Refresh dashboard stats
       loadDashboard()
       Alert.alert(t('schools.success_title', 'Succès'), newStatus === 'ACTIVE' ? "Inscription acceptée" : "Inscription refusée")
     } catch (err) {
@@ -247,7 +263,7 @@ export default function AdminDashboardScreen({ navigation }) {
   const ADMIN_TILES = [
     { id: 'offers', title: 'Offres', icon: 'cube-outline', bgColor: '#E0E7FF', iconColor: '#4F46E5', route: 'AdminOffers' },
     { id: 'monitors', title: 'Moniteurs', icon: 'people-outline', bgColor: '#DCFCE7', iconColor: '#16A34A', route: 'AdminInstructors' },
-    { id: 'enrollments', title: 'Inscriptions', icon: 'school-outline', bgColor: '#FCE7F3', iconColor: '#DB2777', action: handleOpenPendingEnrollments },
+    { id: 'enrollments', title: 'Inscriptions', icon: 'school-outline', bgColor: '#FCE7F3', iconColor: '#DB2777', action: handleOpenAllStudents },
     { id: 'planning', title: 'Planning', icon: 'calendar-outline', bgColor: '#FEF3C7', iconColor: '#D97706', route: 'AdminPlanning' },
     { id: 'modules', title: 'Modules', icon: 'book-outline', bgColor: '#F3E8FF', iconColor: '#9333EA', route: 'AdminModules' },
     { id: 'vehicles', title: 'Flotte auto', icon: 'car-outline', bgColor: '#FFEDD5', iconColor: '#EA580C', route: 'AdminVehicles' },
@@ -467,86 +483,229 @@ export default function AdminDashboardScreen({ navigation }) {
         )}
       </ScrollView>
 
-      <Modal isVisible={allStudentsModalVisible} onClose={() => setAllStudentsModalVisible(false)} title={t('admin_dashboard.students_by_offer')}>
+      {/* Modal Inscriptions (Par Offre, En attente, Toutes) */}
+      <Modal 
+        isVisible={allStudentsModalVisible} 
+        onClose={() => setAllStudentsModalVisible(false)} 
+        title="Gestion des Inscriptions"
+      >
+        {/* Navigation Onglets */}
+        <View style={{ flexDirection: 'row', backgroundColor: themeColors.background, borderRadius: Radius.md, padding: 4, marginBottom: 16 }}>
+          <TouchableOpacity 
+            style={{ flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: Radius.sm, backgroundColor: enrollmentTab === 'BY_OFFER' ? themeColors.surface : 'transparent', ...Shadows.xs }}
+            onPress={() => setEnrollmentTab('BY_OFFER')}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: enrollmentTab === 'BY_OFFER' ? themeColors.primary : themeColors.textMuted }}>
+              Par Offre ({offersWithStudents.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={{ flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: Radius.sm, backgroundColor: enrollmentTab === 'PENDING' ? themeColors.surface : 'transparent', ...Shadows.xs }}
+            onPress={() => setEnrollmentTab('PENDING')}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: enrollmentTab === 'PENDING' ? themeColors.primary : themeColors.textMuted }}>
+              En attente ({pendingEnrollments.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={{ flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: Radius.sm, backgroundColor: enrollmentTab === 'ALL' ? themeColors.surface : 'transparent', ...Shadows.xs }}
+            onPress={() => setEnrollmentTab('ALL')}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: enrollmentTab === 'ALL' ? themeColors.primary : themeColors.textMuted }}>
+              Toutes ({allEnrollmentsList.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+
         {loadingStudents ? (
-          <ActivityIndicator size="large" color={themeColors.primary} style={{ marginVertical: 20 }} />
-        ) : offersWithStudents.length === 0 ? (
-          <EmptyState message={t('admin_dashboard.no_enrollment')} icon="📦" />
+          <ActivityIndicator size="large" color={themeColors.primary} style={{ marginVertical: 30 }} />
         ) : (
-          <ScrollView style={{ maxHeight: 500 }}>
-            <Text style={{ marginBottom: 12, color: themeColors.textSecondary }}>{t('admin_dashboard.click_offer')}</Text>
-            {offersWithStudents.map((offer, index) => {
-              const isExpanded = expandedOffer === offer.id;
-              return (
-                <View key={index} style={{ marginBottom: 10, borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: themeColors.surface, borderWidth: 1, borderColor: themeColors.borderLight }}>
-                  <TouchableOpacity 
-                    style={{ padding: 16, backgroundColor: isExpanded ? themeColors.primary + '15' : themeColors.surface, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
-                    onPress={() => setExpandedOffer(isExpanded ? null : offer.id)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontWeight: 'bold', fontSize: 16, color: themeColors.textPrimary }}>{offer.name}</Text>
-                      <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>{offer.students.length} élève(s) inscrit(s)</Text>
+          <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
+            {/* ONGLET 1 : Inscriptions par Offre */}
+            {enrollmentTab === 'BY_OFFER' && (
+              offersWithStudents.length === 0 ? (
+                <EmptyState message="Aucune inscription disponible" icon="📦" />
+              ) : (
+                offersWithStudents.map((offer, index) => {
+                  const isExpanded = expandedOffer === offer.id;
+                  return (
+                    <View key={index} style={{ marginBottom: 12, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: themeColors.surface, borderWidth: 1, borderColor: themeColors.borderLight, ...Shadows.sm }}>
+                      <TouchableOpacity 
+                        style={{ padding: 16, backgroundColor: isExpanded ? themeColors.primary + '12' : themeColors.surface, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                        onPress={() => setExpandedOffer(isExpanded ? null : offer.id)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontWeight: '800', fontSize: 16, color: themeColors.textPrimary }}>{offer.name}</Text>
+                          <Text style={{ color: themeColors.textSecondary, fontSize: 13, marginTop: 4, fontWeight: '500' }}>
+                            {offer.students.length} élève(s) inscrit(s)
+                          </Text>
+                        </View>
+                        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: themeColors.background, alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={18} color={themeColors.textSecondary} />
+                        </View>
+                      </TouchableOpacity>
+                      
+                      {isExpanded && (
+                        <View style={{ padding: 16, backgroundColor: themeColors.background, borderTopWidth: 1, borderTopColor: themeColors.borderLight }}>
+                          {offer.students.map((student, sIndex) => {
+                            const isPending = student.status === 'PENDING';
+                            const isCancelled = student.status === 'CANCELLED';
+                            const statusColor = isPending ? '#D97706' : (isCancelled ? '#EF4444' : '#059669');
+                            const statusBg = isPending ? '#FEF3C7' : (isCancelled ? '#FEE2E2' : '#D1FAE5');
+                            const statusLabel = isPending ? 'En attente' : (isCancelled ? 'Refusé' : 'Actif');
+
+                            return (
+                              <View key={sIndex} style={{ paddingVertical: 12, borderBottomWidth: sIndex === offer.students.length - 1 ? 0 : 1, borderBottomColor: themeColors.borderLight }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text style={{ fontWeight: '700', fontSize: 15, color: themeColors.textPrimary }}>👤 {student.studentName}</Text>
+                                  <View style={{ backgroundColor: statusBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full }}>
+                                    <Text style={{ color: statusColor, fontWeight: '700', fontSize: 11 }}>{statusLabel}</Text>
+                                  </View>
+                                </View>
+
+                                {(student.phone || student.email) && (
+                                  <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>
+                                    {student.phone ? `📞 ${student.phone}` : ''} {student.email ? `✉️ ${student.email}` : ''}
+                                  </Text>
+                                )}
+
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                                  <Text style={{ color: themeColors.textSecondary, fontSize: 12, fontWeight: '500' }}>
+                                    Conduite : {student.hoursConsumed}h / {student.hours}h
+                                  </Text>
+                                  <Text style={{ color: themeColors.textMuted, fontSize: 11 }}>
+                                    Inscrit le : {new Date(student.enrolledAt).toLocaleDateString()}
+                                  </Text>
+                                </View>
+
+                                {/* Actions rapides si l'inscription est en attente */}
+                                {isPending && (
+                                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                                    <TouchableOpacity 
+                                      style={{ flex: 1, paddingVertical: 6, backgroundColor: '#FEE2E2', borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === student.id ? 0.5 : 1 }}
+                                      onPress={() => handleUpdateEnrollmentStatus(student.id, 'CANCELLED')}
+                                      disabled={updatingEnrollmentId === student.id}
+                                    >
+                                      <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 12 }}>Refuser</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                      style={{ flex: 1, paddingVertical: 6, backgroundColor: '#10B981', borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === student.id ? 0.5 : 1 }}
+                                      onPress={() => handleUpdateEnrollmentStatus(student.id, 'ACTIVE')}
+                                      disabled={updatingEnrollmentId === student.id}
+                                    >
+                                      <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>Accepter</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </View>
+                            )
+                          })}
+                        </View>
+                      )}
                     </View>
-                    <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={themeColors.textSecondary} />
-                  </TouchableOpacity>
-                  
-                  {isExpanded && (
-                    <View style={{ padding: 16, backgroundColor: themeColors.background, borderTopWidth: 1, borderTopColor: themeColors.borderLight }}>
-                      {offer.students.map((student, sIndex) => (
-                         <View key={sIndex} style={{ paddingVertical: 8, borderBottomWidth: sIndex === offer.students.length - 1 ? 0 : 1, borderBottomColor: themeColors.borderLight }}>
-                           <Text style={{ fontWeight: '600', color: themeColors.textPrimary }}>{student.studentName}</Text>
-                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                             <Text style={{ color: themeColors.textSecondary, fontSize: 12 }}>{student.hoursConsumed}h / {student.hours}h • {new Date(student.enrolledAt).toLocaleDateString()}</Text>
-                             <Text style={{ color: student.status === 'ACTIVE' ? themeColors.success : themeColors.warning, fontWeight: 'bold', fontSize: 12 }}>
-                               {student.status}
-                             </Text>
-                           </View>
-                         </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
+                  )
+                })
               )
-            })}
+            )}
+
+            {/* ONGLET 2 : Inscriptions En Attente */}
+            {enrollmentTab === 'PENDING' && (
+              pendingEnrollments.length === 0 ? (
+                <EmptyState message="Aucune inscription en attente de validation" icon="✅" />
+              ) : (
+                pendingEnrollments.map((enrollment, index) => (
+                  <View key={index} style={{ marginBottom: 12, padding: 16, backgroundColor: themeColors.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: themeColors.borderLight, ...Shadows.sm }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontWeight: '700', fontSize: 16, color: themeColors.textPrimary }}>{enrollment.studentName}</Text>
+                      <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full }}>
+                        <Text style={{ color: '#D97706', fontWeight: '700', fontSize: 11 }}>En attente</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: themeColors.primary, fontWeight: '600', marginTop: 4 }}>Offre : {enrollment.offerName}</Text>
+                    {enrollment.price ? <Text style={{ color: themeColors.textSecondary, fontSize: 13, marginTop: 2 }}>Prix : {formatPrice(enrollment.price)}</Text> : null}
+                    <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>Inscrit le : {new Date(enrollment.enrolledAt).toLocaleDateString()}</Text>
+
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                      <TouchableOpacity 
+                        style={{ flex: 1, paddingVertical: 10, backgroundColor: '#FEE2E2', borderRadius: Radius.md, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
+                        onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'CANCELLED')}
+                        disabled={updatingEnrollmentId === enrollment.id}
+                      >
+                        <Text style={{ color: '#DC2626', fontWeight: '700' }}>Refuser</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={{ flex: 1, paddingVertical: 10, backgroundColor: '#10B981', borderRadius: Radius.md, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
+                        onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'ACTIVE')}
+                        disabled={updatingEnrollmentId === enrollment.id}
+                      >
+                        <Text style={{ color: '#FFF', fontWeight: '700' }}>Accepter</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )
+            )}
+
+            {/* ONGLET 3 : Toutes les Inscriptions */}
+            {enrollmentTab === 'ALL' && (
+              <View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: themeColors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: themeColors.borderLight, paddingHorizontal: 12, height: 40, marginBottom: 12 }}>
+                  <Ionicons name="search-outline" size={18} color={themeColors.textMuted} style={{ marginRight: 8 }} />
+                  <TextInput 
+                    style={{ flex: 1, color: themeColors.textPrimary, fontSize: 14 }}
+                    placeholder="Rechercher par nom d'élève ou d'offre..."
+                    placeholderTextColor={themeColors.textMuted}
+                    value={enrollmentSearchQuery}
+                    onChangeText={setEnrollmentSearchQuery}
+                  />
+                  {enrollmentSearchQuery ? (
+                    <TouchableOpacity onPress={() => setEnrollmentSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={themeColors.textMuted} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                {allEnrollmentsList
+                  .filter(e => {
+                    if (!enrollmentSearchQuery.trim()) return true;
+                    const q = enrollmentSearchQuery.toLowerCase();
+                    return (
+                      (e.studentName && e.studentName.toLowerCase().includes(q)) ||
+                      (e.offerName && e.offerName.toLowerCase().includes(q))
+                    );
+                  })
+                  .map((enrollment, index) => {
+                    const isPending = enrollment.status === 'PENDING';
+                    const isCancelled = enrollment.status === 'CANCELLED';
+                    const statusColor = isPending ? '#D97706' : (isCancelled ? '#EF4444' : '#059669');
+                    const statusBg = isPending ? '#FEF3C7' : (isCancelled ? '#FEE2E2' : '#D1FAE5');
+                    const statusLabel = isPending ? 'En attente' : (isCancelled ? 'Refusé' : 'Actif');
+
+                    return (
+                      <View key={index} style={{ marginBottom: 10, padding: 14, backgroundColor: themeColors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: themeColors.borderLight, ...Shadows.sm }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={{ fontWeight: '700', fontSize: 15, color: themeColors.textPrimary }}>👤 {enrollment.studentName}</Text>
+                          <View style={{ backgroundColor: statusBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full }}>
+                            <Text style={{ color: statusColor, fontWeight: '700', fontSize: 11 }}>{statusLabel}</Text>
+                          </View>
+                        </View>
+                        <Text style={{ color: themeColors.primary, fontWeight: '600', fontSize: 13, marginTop: 4 }}>Offre : {enrollment.offerName}</Text>
+                        <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>
+                          Inscrit le : {new Date(enrollment.enrolledAt).toLocaleDateString()} • {enrollment.hoursConsumed || 0}h effectuées
+                        </Text>
+                      </View>
+                    );
+                  })}
+              </View>
+            )}
           </ScrollView>
         )}
       </Modal>
 
-      <Modal isVisible={pendingModalVisible} onClose={() => setPendingModalVisible(false)} title="Inscriptions en attente">
-        {loadingPending ? (
-          <ActivityIndicator size="large" color={themeColors.primary} style={{ marginVertical: 20 }} />
-        ) : pendingEnrollments.length === 0 ? (
-          <EmptyState message="Aucune inscription en attente" icon="✅" />
-        ) : (
-          <ScrollView style={{ maxHeight: 500 }}>
-            {pendingEnrollments.map((enrollment, index) => (
-              <View key={index} style={{ marginBottom: 12, padding: 16, backgroundColor: themeColors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: themeColors.borderLight, ...Shadows.sm }}>
-                <Text style={{ fontWeight: 'bold', fontSize: 16, color: themeColors.textPrimary }}>{enrollment.studentName}</Text>
-                <Text style={{ color: themeColors.textSecondary, marginTop: 4 }}>Offre: {enrollment.offerName}</Text>
-                <Text style={{ color: themeColors.textSecondary }}>Prix: {formatPrice(enrollment.price)}</Text>
-                <Text style={{ color: themeColors.textMuted, fontSize: 12, marginTop: 4 }}>Inscrit le: {new Date(enrollment.enrolledAt).toLocaleDateString()}</Text>
-                
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 10 }}>
-                  <TouchableOpacity 
-                    style={{ flex: 1, padding: 10, backgroundColor: themeColors.errorLight, borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
-                    onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'CANCELLED')}
-                    disabled={updatingEnrollmentId === enrollment.id}
-                  >
-                    <Text style={{ color: themeColors.error, fontWeight: 'bold' }}>Refuser</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ flex: 1, padding: 10, backgroundColor: themeColors.success, borderRadius: Radius.sm, alignItems: 'center', opacity: updatingEnrollmentId === enrollment.id ? 0.5 : 1 }}
-                    onPress={() => handleUpdateEnrollmentStatus(enrollment.id, 'ACTIVE')}
-                    disabled={updatingEnrollmentId === enrollment.id}
-                  >
-                    <Text style={{ color: themeColors.textWhite, fontWeight: 'bold' }}>Accepter</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </Modal>
 
       <LiveSessionTrackingModal
         visible={!!trackingSession}

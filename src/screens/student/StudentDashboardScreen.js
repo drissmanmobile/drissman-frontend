@@ -28,6 +28,7 @@ export default function StudentDashboardScreen() {
   const { openMenu } = useSideMenu()
   const navigation = useNavigation()
 
+  const [loading, setLoading] = useState(true)
   const [enrollmentsList, setEnrollmentsList] = useState([])
   const [unpaidEnrollment, setUnpaidEnrollment] = useState(null)
   const [unreadCount, setUnreadCount] = useState(0)
