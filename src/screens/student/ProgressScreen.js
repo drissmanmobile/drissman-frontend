@@ -280,14 +280,24 @@ export function StudentProgressScreen() {
           </View>
 
           <View style={styles.modulesContainer}>
-            {modules.map((mod) => {
-              const modPct = Math.min(100, Math.round((mod.completedHours / mod.requiredHours) * 100));
-              const isDone = modPct === 100;
-              const isExpanded = expandedModule === mod.id;
+            {modules.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Ionicons name="book-outline" size={40} color={Colors.textMuted} />
+                <Text style={styles.emptyTitle}>Aucun module pour cette formation</Text>
+                <Text style={styles.emptyText}>
+                  L'auto-école n'a pas encore créé de modules pour cette offre. Les modules apparaîtront dès que l'administrateur les aura ajoutés.
+                </Text>
+              </View>
+            ) : (
+              modules.map((mod) => {
+                const modPct = Math.min(100, Math.round((mod.completedHours / mod.requiredHours) * 100));
+                const isDone = modPct === 100;
+                const isExpanded = expandedModule === mod.id;
 
-              return (
-                <TouchableOpacity
-                  key={mod.id}
+                return (
+                  <TouchableOpacity
+                    key={mod.id}
+
                   style={[styles.moduleCard, isDone && styles.moduleCardDone]}
                   onPress={() => setExpandedModule(isExpanded ? null : mod.id)}
                   activeOpacity={0.85}
@@ -333,8 +343,11 @@ export function StudentProgressScreen() {
                   )}
                 </TouchableOpacity>
               );
-            })}
+            })
+          )}
           </View>
+
+
 
           {/* Section: Next Lesson Banner */}
           {nextSession && (
