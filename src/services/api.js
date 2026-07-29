@@ -12,7 +12,7 @@ const LOCAL_LAN_IP = '10.66.131.63'
 
 const getDynamicBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL
-  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
+  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080' && !envUrl.includes('drisman.yowyob.com')) {
     return envUrl.trim()
   }
 
