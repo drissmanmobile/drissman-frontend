@@ -11,10 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSideMenu } from '../../context/SideMenuContext';
+import { getStudentEnrollments, getStudentSessions } from '../../services/services';
 import api from '../../services/api';
 import { Typography, Spacing, Radius, Shadows } from '../../utils/theme';
 
@@ -54,9 +55,11 @@ export function StudentProgressScreen() {
     }
   }, [user]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   // Global calculations
   const totalPurchasedHours = (enrollments || []).reduce((sum, e) => sum + (e.hoursPurchased || e.hours || 0), 0);
@@ -70,7 +73,18 @@ export function StudentProgressScreen() {
     : 0;
 
   // Next session
-  const upcomingSessions = (sessions || []).filter(s => s.status !== 'COMPLETED' && s.status !== 'CANCELLED');
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  const upcomingSessions = (sessions || [])
+    .filter(s => s.status !== 'COMPLETED' && s.status !== 'CANCELLED' && s.date >= todayStr)
+    .sort((a, b) => {
+      if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
   const nextSession = upcomingSessions[0];
 
   // Filter real backend modules for student's active offer (if any)

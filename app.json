@@ -44,7 +44,6 @@
     "scheme": "drissman",
     "extra": {
       "apiUrl": "http://localhost:8080",
-      "useMock": false,
       "eas": {
         "projectId": "04206e1b-ea5f-465a-8580-80e624cca5e2"
       }

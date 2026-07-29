@@ -51,8 +51,6 @@ drissman/
 │   │   ├── api.js                 # Client Axios + intercepteurs JWT
 │   │   ├── auth.service.js        # Login, Register, Profile
 │   │   └── services.js            # Schools, Sessions, Enrollments, Instructors
-│   ├── mocks/
-│   │   └── data.mock.js           # Données de test (écoles, sessions, etc.)
 │   └── utils/
 │       ├── theme.js               # Colors, Typography, Spacing, Radius, Shadows
 │       └── formatters.js          # formatPrice (FCFA), formatDate, formatTime
@@ -74,7 +72,6 @@ drissman/
 
 ```env
 EXPO_PUBLIC_API_URL=http://localhost:8080   # URL de l'API Spring Boot
-EXPO_PUBLIC_USE_MOCK=true                   # true = données mockées, false = vraie API
 ```
 
 ## 👥 Navigation par rôle
@@ -91,4 +88,4 @@ EXPO_PUBLIC_USE_MOCK=true                   # true = données mockées, false = 
 2. **Intégrer les paiements** MTN Mobile Money / Orange Money
 3. **Ajouter les cartes GPS** avec `react-native-maps`
 4. **Notifications push** avec `expo-notifications`
-5. **Connecter l'API Spring Boot** en passant `EXPO_PUBLIC_USE_MOCK=false`
+5. **Connecter l'API Spring Boot**

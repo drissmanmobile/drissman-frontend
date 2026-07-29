@@ -1,5 +1,5 @@
 // src/screens/instructor/ScheduleScreen.js
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   View,
   Text,
@@ -14,13 +14,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTranslation } from 'react-i18next'
+import { useFocusEffect } from '@react-navigation/native'
 import { useAuth } from '../../context/AuthContext'
 import { useSideMenu } from '../../context/SideMenuContext'
 import { useTheme } from '../../context/ThemeContext'
 import { getInstructorSchedule, validateSession, getSessionStudents } from '../../services/services'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
+import { formatDate } from '../../utils/formatters'
 import LiveSessionTrackingModal from '../../components/session/LiveSessionTrackingModal'
 
+const getTodayStr = () => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 export default function InstructorScheduleScreen() {
   const { Colors: themeColors } = useTheme()
@@ -31,7 +40,8 @@ export default function InstructorScheduleScreen() {
 
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState([])
-  const [selectedDay, setSelectedDay] = useState('20') // default 20 (Mai 2025)
+  const [selectedDateStr, setSelectedDateStr] = useState(getTodayStr())
+  const [showAllSessions, setShowAllSessions] = useState(false)
   const [selectedSession, setSelectedSession] = useState(null)
   const [validating, setValidating] = useState(false)
   const [showTrackingModal, setShowTrackingModal] = useState(false)
@@ -41,19 +51,85 @@ export default function InstructorScheduleScreen() {
   const [attendanceMap, setAttendanceMap] = useState({})
   const [loadingStudents, setLoadingStudents] = useState(false)
 
-  const daysList = [
-    { dayName: 'LUN', dayNum: '19', fullDate: '2025-05-19' },
-    { dayName: 'MAR', dayNum: '20', fullDate: '2025-05-20' },
-    { dayName: 'MER', dayNum: '21', fullDate: '2025-05-21' },
-    { dayName: 'JEU', dayNum: '22', fullDate: '2025-05-22' },
-    { dayName: 'VEN', dayNum: '23', fullDate: '2025-05-23' },
-    { dayName: 'SAM', dayNum: '24', fullDate: '2025-05-24' },
-    { dayName: 'DIM', dayNum: '25', fullDate: '2025-05-25' },
-  ]
+  // Generate dynamic days list around today & sessions
+  const daysList = useMemo(() => {
+    const datesSet = new Set()
+    const today = new Date()
+    
+    // Add window -7 to +14 days around today
+    for (let i = -7; i <= 14; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      datesSet.add(`${year}-${month}-${day}`)
+    }
 
-  useEffect(() => {
-    fetchSchedule()
-  }, [])
+    // Add any dates present in actual sessions
+    (sessions || []).forEach(s => {
+      if (s.date) datesSet.add(s.date)
+    })
+
+    const sortedDates = Array.from(datesSet).sort()
+    const dayNames = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM']
+    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+
+    return sortedDates.map(dateStr => {
+      const parts = dateStr.split('-').map(Number)
+      const dateObj = new Date(parts[0], parts[1] - 1, parts[2])
+      return {
+        fullDate: dateStr,
+        dayNum: String(parts[2]),
+        dayName: dayNames[dateObj.getDay()],
+        monthName: monthNames[dateObj.getMonth()],
+        year: parts[0],
+        hasSession: (sessions || []).some(s => s.date === dateStr)
+      }
+    })
+  }, [sessions])
+
+  // Get month label based on selected date
+  const currentMonthHeader = useMemo(() => {
+    const item = daysList.find(d => d.fullDate === selectedDateStr)
+    if (item) {
+      return `${item.monthName} ${item.year}`
+    }
+    if (selectedDateStr) {
+      const parts = selectedDateStr.split('-').map(Number)
+      const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+      if (parts[1]) return `${monthNames[parts[1] - 1] || ''} ${parts[0]}`
+    }
+    return 'Planning'
+  }, [selectedDateStr, daysList])
+
+  // Filtered sessions for the selected date
+  const filteredSessions = useMemo(() => {
+    if (showAllSessions) return sessions
+    return (sessions || []).filter(s => s.date === selectedDateStr)
+  }, [sessions, selectedDateStr, showAllSessions])
+
+  const fetchSchedule = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await getInstructorSchedule(user?.id || 'i1')
+      const normalized = (data || []).map((s, idx) => ({
+        ...s,
+        id: String(s.id || s.sessionId || `session_${idx}`),
+      }))
+      setSessions(normalized)
+    } catch (e) {
+      console.log('Error fetching schedule:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id])
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSchedule()
+    }, [fetchSchedule])
+  )
 
   useEffect(() => {
     if (selectedSession) {
@@ -107,22 +183,6 @@ export default function InstructorScheduleScreen() {
       nextMap[key] = selectAll
     })
     setAttendanceMap(nextMap)
-  }
-
-  const fetchSchedule = async () => {
-    setLoading(true)
-    try {
-      const data = await getInstructorSchedule(user?.id || 'i1')
-      const normalized = (data || []).map((s, idx) => ({
-        ...s,
-        id: String(s.id || s.sessionId || `session_${idx}`),
-      }))
-      setSessions(normalized)
-    } catch (e) {
-      console.log('Error fetching schedule:', e)
-    } finally {
-      setLoading(false)
-    }
   }
 
   const handleValidatePresence = async (markPresent = true) => {
@@ -191,15 +251,25 @@ export default function InstructorScheduleScreen() {
 
       {/* Date Selector Row */}
       <View style={styles.dateSelectorContainer}>
-        <Text style={styles.monthTitle}>Mai 2025</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
+          <Text style={styles.monthTitle}>{currentMonthHeader}</Text>
+          <TouchableOpacity onPress={() => setShowAllSessions(prev => !prev)}>
+            <Text style={{ color: themeColors.primary || '#4F46E5', fontWeight: '600', fontSize: 13 }}>
+              {showAllSessions ? 'Par date' : 'Tout afficher'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScroll}>
           {daysList.map((item) => {
-            const isSelected = selectedDay === item.dayNum
+            const isSelected = !showAllSessions && selectedDateStr === item.fullDate
             return (
               <TouchableOpacity
-                key={item.dayNum}
+                key={item.fullDate}
                 style={[styles.dayCard, isSelected && styles.dayCardSelected]}
-                onPress={() => setSelectedDay(item.dayNum)}
+                onPress={() => {
+                  setSelectedDateStr(item.fullDate)
+                  setShowAllSessions(false)
+                }}
               >
                 <Text style={[styles.dayName, isSelected && styles.dayTextSelected]}>
                   {item.dayName}
@@ -207,6 +277,9 @@ export default function InstructorScheduleScreen() {
                 <Text style={[styles.dayNum, isSelected && styles.dayTextSelected]}>
                   {item.dayNum}
                 </Text>
+                {item.hasSession && (
+                  <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: isSelected ? '#FFF' : '#4F46E5', marginTop: 3 }} />
+                )}
               </TouchableOpacity>
             )
           })}
@@ -218,9 +291,28 @@ export default function InstructorScheduleScreen() {
         <ActivityIndicator style={{ marginTop: 40 }} color="#4F46E5" />
       ) : (
         <FlatList
-          data={sessions}
+          data={filteredSessions}
           keyExtractor={(item, index) => (item && item.id ? String(item.id) : (item && item.sessionId ? String(item.sessionId) : `session_${index}`))}
           contentContainerStyle={styles.agendaList}
+          ListEmptyComponent={
+            <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
+              <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: '#374151', textAlign: 'center' }}>
+                Aucune séance ce jour
+              </Text>
+              <Text style={{ marginTop: 6, fontSize: 13, color: '#6B7280', textAlign: 'center', paddingHorizontal: 20 }}>
+                Aucune séance de conduite n'est programmée pour le {formatDate(selectedDateStr)}.
+              </Text>
+              <TouchableOpacity
+                style={{ marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#EEF2FF', borderRadius: 20 }}
+                onPress={() => setShowAllSessions(true)}
+              >
+                <Text style={{ color: '#4F46E5', fontWeight: '600', fontSize: 13 }}>
+                  Voir toutes les séances
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
           renderItem={({ item }) => {
             const badge = getStatusBadgeProps(item.status)
             const isCompleted = item.status === 'COMPLETED'
