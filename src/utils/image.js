@@ -5,7 +5,7 @@ export const DEFAULT_SCHOOL_IMAGE = 'https://images.unsplash.com/photo-154931766
 export const DEFAULT_AVATAR_IMAGE = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'
 
 /**
- * Resolve any image URL (relative path, localhost URL, or plain filename) into a valid absolute URL for React Native.
+ * Resolve any image URL (relative path, old IP, localhost URL, or plain filename) into a valid absolute URL for React Native.
  */
 export function resolveImageUrl(url, defaultFallback = DEFAULT_SCHOOL_IMAGE) {
   if (!url || typeof url !== 'string' || !url.trim()) {
@@ -14,9 +14,12 @@ export function resolveImageUrl(url, defaultFallback = DEFAULT_SCHOOL_IMAGE) {
 
   const cleanUrl = url.trim()
 
-  // Replace localhost or 127.0.0.1 with BASE_URL
-  if (cleanUrl.startsWith('http://localhost:8080') || cleanUrl.startsWith('http://127.0.0.1:8080')) {
-    return cleanUrl.replace(/^http:\/\/(localhost|127\.0\.0\.1):8080/, BASE_URL)
+  // If image URL is stored with any backend port 8080 or /api/images/ path, rewrite with current active BASE_URL
+  if (cleanUrl.includes('/api/images/')) {
+    const filename = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1)
+    if (filename && filename.trim()) {
+      return `${BASE_URL}/api/images/${filename.trim()}`
+    }
   }
 
   // Prepend BASE_URL for relative paths
