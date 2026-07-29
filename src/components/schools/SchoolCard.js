@@ -82,7 +82,6 @@ export default function SchoolCard({ school, onPress }) {
     </TouchableOpacity>
   )
 }
-}
 
 const getStyles = (themeColors) => StyleSheet.create({
   card: {
