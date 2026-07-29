@@ -1,16 +1,23 @@
-// src/components/schools/SchoolCard.js
+import React, { useState } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { formatPrice } from '../../utils/formatters'
 import { Ionicons } from '@expo/vector-icons'
+import { resolveImageUrl, DEFAULT_SCHOOL_IMAGE } from '../../utils/image'
 
 export default function SchoolCard({ school, onPress }) {
   const { Colors: themeColors } = useTheme();
   const styles = getStyles(themeColors);
+  const [imageError, setImageError] = useState(false);
+
   const lowestPrice = school.offers?.length
     ? Math.min(...school.offers.map((o) => o.price))
-    : null
+    : (school.minPrice != null ? school.minPrice : null)
+
+  const resolvedUri = !imageError
+    ? resolveImageUrl(school.imageUrl, DEFAULT_SCHOOL_IMAGE)
+    : DEFAULT_SCHOOL_IMAGE
 
   return (
     <TouchableOpacity
@@ -18,13 +25,14 @@ export default function SchoolCard({ school, onPress }) {
       activeOpacity={0.85}
       style={styles.card}
     >
-      {/* Image placeholder */}
+      {/* Image container */}
       <View style={styles.imagePlaceholder}>
-        {school.imageUrl ? (
-          <Image source={{ uri: school.imageUrl }} style={styles.image} />
-        ) : (
-          <Ionicons name="business-outline" size={36} color={themeColors.textSecondary} />
-        )}
+        <Image
+          source={{ uri: resolvedUri }}
+          style={styles.image}
+          onError={() => setImageError(true)}
+          resizeMode="cover"
+        />
       </View>
 
       <View style={styles.body}>
@@ -33,15 +41,15 @@ export default function SchoolCard({ school, onPress }) {
 
         {/* Ville & Distance */}
         <Text style={styles.city}>
-          <Ionicons name="location-outline" size={12} color={themeColors.textSecondary} /> {school.city}
+          <Ionicons name="location-outline" size={12} color={themeColors.textSecondary} /> {school.city || 'Cameroun'}
           {school.calculatedDistance != null && ` • ${school.calculatedDistance.toFixed(1)} km`}
         </Text>
 
         {/* Note */}
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={14} color={themeColors.primary} />
-          <Text style={styles.ratingValue}>{school.rating}</Text>
-          <Text style={styles.ratingCount}>({school.reviewCount} avis)</Text>
+          <Text style={styles.ratingValue}>{school.rating || 5.0}</Text>
+          <Text style={styles.ratingCount}>({school.reviewCount || 0} avis)</Text>
         </View>
 
         {/* Services */}
@@ -67,12 +75,13 @@ export default function SchoolCard({ school, onPress }) {
             </View>
           )}
           <View style={styles.cta}>
-            <Text style={styles.ctaText}>Voir →</Text>
+            <Text style={styles.ctaText}>Voir</Text>
           </View>
         </View>
       </View>
     </TouchableOpacity>
   )
+}
 }
 
 const getStyles = (themeColors) => StyleSheet.create({

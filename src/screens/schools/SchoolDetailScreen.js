@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext'
 import { formatPrice } from '../../utils/formatters'
 import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
+import { resolveImageUrl, DEFAULT_SCHOOL_IMAGE } from '../../utils/image'
 
 const getStyles = (themeColors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: themeColors.background },
@@ -235,7 +236,7 @@ export default function SchoolDetailScreen({ route, navigation }) {
     )
   }
 
-  const defaultImage = 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=600&q=80'
+  const heroUri = resolveImageUrl(school.imageUrl, DEFAULT_SCHOOL_IMAGE)
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -250,8 +251,9 @@ export default function SchoolDetailScreen({ route, navigation }) {
 
       <ScrollView contentContainerStyle={{ paddingBottom: Spacing.xl }}>
         <Image
-          source={{ uri: school.imageUrl || defaultImage }}
+          source={{ uri: heroUri }}
           style={styles.heroImage}
+          resizeMode="cover"
         />
         
         <View style={styles.infoContainer}>
@@ -282,7 +284,7 @@ export default function SchoolDetailScreen({ route, navigation }) {
               <View key={offer.id} style={styles.offerCard}>
                 <View style={styles.offerHeader}>
                   <Image 
-                    source={{ uri: school.imageUrl || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=100&q=80' }} 
+                    source={{ uri: resolveImageUrl(offer.imageUrl || school.imageUrl, DEFAULT_SCHOOL_IMAGE) }} 
                     style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F3F4F6' }} 
                   />
                   <View style={{ flex: 1 }}>

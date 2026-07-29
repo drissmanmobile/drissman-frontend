@@ -11,6 +11,11 @@ import { Platform } from 'react-native'
 const LOCAL_LAN_IP = '10.66.131.63'
 
 const getDynamicBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL
+  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
+    return envUrl.trim()
+  }
+
   const hostUri = Constants.expoConfig?.hostUri || 
                   Constants.manifest?.debuggerHost || 
                   Constants.manifest2?.extra?.expoGo?.developer?.extra?.hostUri ||
@@ -22,11 +27,6 @@ const getDynamicBaseUrl = () => {
     if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
       return `http://${hostIp}:8080`
     }
-  }
-
-  const envUrl = process.env.EXPO_PUBLIC_API_URL
-  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080') {
-    return envUrl
   }
 
   if (Platform.OS === 'android' && !Device.isDevice) {
