@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../context/ThemeContext';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme';
+import * as WebBrowser from 'expo-web-browser';
+import api from '../../services/api';
 import { getMyDocuments } from '../../services/services';
 
 export default function InstructorDocumentsScreen({ navigation }) {
@@ -20,10 +22,12 @@ export default function InstructorDocumentsScreen({ navigation }) {
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const docs = await getMyDocuments();
-      setDocuments(docs || []);
-    } catch (err) {
-      console.error("Error fetching documents:", err);
+      const res = await getMyDocuments();
+      if (res) {
+        setDocuments(res);
+      }
+    } catch (e) {
+      console.log('Error loading documents:', e);
     } finally {
       setLoading(false);
     }
@@ -36,7 +40,7 @@ export default function InstructorDocumentsScreen({ navigation }) {
   // Adjust activeTab values based on Category vs Type, our API stores category "Administratif" / "Pédagogique"
   // If we map activeTab 'ADMIN' to 'Administratif' and 'PEDAGO' to 'Pédagogique'
   const filteredDocs = documents.filter(d => {
-    if (activeTab === 'ADMIN') return d.category === 'Administratif' || d.category === 'ADMIN';
+    if (activeTab === 'ADMIN') return d.category === 'Administratif' || d.category === 'ADMIN' || !d.category;
     if (activeTab === 'PEDAGO') return d.category === 'Pédagogique' || d.category === 'PEDAGO';
     return true;
   });
@@ -47,8 +51,14 @@ export default function InstructorDocumentsScreen({ navigation }) {
     return date.toLocaleDateString('fr-FR');
   };
 
-  const handleOpenDoc = (url) => {
-    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+  const handleOpenDoc = async (url) => {
+    if (!url) return;
+    const fullUrl = url.startsWith('/') ? `${api.defaults.baseURL}${url}` : url;
+    try {
+      await WebBrowser.openBrowserAsync(fullUrl);
+    } catch (_) {
+      Linking.openURL(fullUrl).catch(err => console.error("Couldn't load page", err));
+    }
   };
 
   return (

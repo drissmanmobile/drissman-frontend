@@ -259,7 +259,7 @@ export default function InstructorScheduleScreen() {
                         <View style={styles.offerBadgeContainer}>
                           <Ionicons name="ribbon-outline" size={12} color="#4F46E5" style={{ marginRight: 3 }} />
                           <Text style={styles.offerBadgeText}>
-                            Offre : {item.offerName || 'Pack Permis B'}
+                            Offre : {item.offerName || 'N/A'}
                           </Text>
                         </View>
                       </View>
@@ -353,7 +353,7 @@ export default function InstructorScheduleScreen() {
                   <View style={styles.detailItemRow}>
                     <Text style={styles.detailLabel}>Offre de formation :</Text>
                     <Text style={[styles.detailValue, { color: '#4F46E5', fontWeight: '700' }]}>
-                      {selectedSession.offerName || 'Pack Permis B'}
+                      {selectedSession.offerName || 'N/A'}
                     </Text>
                   </View>
                   <View style={styles.detailItemRow}>

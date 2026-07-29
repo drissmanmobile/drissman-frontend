@@ -38,7 +38,9 @@ export default function InstructorDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
-        setLoading(true)
+        if (!sessions.length) {
+          setLoading(true)
+        }
         try {
           const [sessionsData, contactsData, notifsRes] = await Promise.allSettled([
             getInstructorSchedule(user?.id),
@@ -85,7 +87,7 @@ export default function InstructorDashboardScreen() {
       if (user) {
         fetchData()
       }
-    }, [user])
+    }, [user?.id])
   )
 
   const dashboardTiles = useMemo(() => [

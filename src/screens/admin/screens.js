@@ -19,13 +19,16 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
+import * as WebBrowser from 'expo-web-browser'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import { useAuth } from '../../context/AuthContext'
 import { useSideMenu } from '../../context/SideMenuContext'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { updateProfile } from '../../services/auth.service'
+import api from '../../services/api'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { formatDate, formatTime, formatPrice } from '../../utils/formatters'
 import { Badge, Modal, Button, EmptyState } from '../../components/ui/index'
@@ -111,12 +114,14 @@ export default function AdminDashboardScreen({ navigation }) {
       if (user?.schoolId) {
         loadSchoolDocuments(user.schoolId)
       }
-    }, [user])
+    }, [user?.schoolId, user?.id])
   )
 
   async function loadDashboard() {
     try {
-      setLoading(true)
+      if (!stats) {
+        setLoading(true)
+      }
       const data = await getAdminDashboard()
       setStats(data)
     } catch (err) {
@@ -400,7 +405,15 @@ export default function AdminDashboardScreen({ navigation }) {
               <TouchableOpacity
                 key={idx}
                 style={styles.docRow}
-                onPress={() => Linking.openURL(doc.fileUrl)}
+                onPress={async () => {
+                  if (!doc.fileUrl) return;
+                  const fullUrl = doc.fileUrl.startsWith('/') ? `${api.defaults.baseURL}${doc.fileUrl}` : doc.fileUrl;
+                  try {
+                    await WebBrowser.openBrowserAsync(fullUrl);
+                  } catch (_) {
+                    Linking.openURL(fullUrl).catch(err => console.error("Couldn't load page", err));
+                  }
+                }}
               >
                 <View style={styles.docIconBg}>
                   <Ionicons name="document-text-outline" size={20} color="#4F46E5" />
@@ -763,7 +776,9 @@ export function AdminOffersScreen() {
 
   async function loadOffers() {
     try {
-      setLoading(true)
+      if (!offers || offers.length === 0) {
+        setLoading(true)
+      }
       const [data, mons] = await Promise.all([getAdminOffers(), getAdminMonitors()])
       setOffers(data)
       setMonitors(mons)
@@ -1055,7 +1070,9 @@ export function AdminInstructorsScreen() {
 
   async function loadMonitors() {
     try {
-      setLoading(true)
+      if (!monitors || monitors.length === 0) {
+        setLoading(true)
+      }
       const data = await getAdminMonitors()
       setMonitors(data)
     } catch (err) {
@@ -1399,7 +1416,9 @@ export function AdminPlanningScreen() {
 
   async function loadPreRequisites() {
     try {
-      setLoading(true)
+      if (monitors.length === 0 && modules.length === 0) {
+        setLoading(true)
+      }
       const results = await Promise.allSettled([
         getAdminMonitors(),
         getAdminModules(),
@@ -1794,6 +1813,9 @@ export function AdminProfileScreen() {
   const [sEmail, setSEmail] = useState('')
   const [sWebsite, setSWebsite] = useState('')
   const [sImageUrl, setSImageUrl] = useState('')
+  const [sLat, setSLat] = useState('')
+  const [sLng, setSLng] = useState('')
+  const [locating, setLocating] = useState(false)
   const [uploadingSchoolLogo, setUploadingSchoolLogo] = useState(false)
 
   const pickSchoolLogo = async () => {
@@ -1829,7 +1851,9 @@ export function AdminProfileScreen() {
 
   async function loadSchoolProfile() {
     try {
-      setLoading(true)
+      if (!sName) {
+        setLoading(true)
+      }
       const res = await getAdminSchoolProfile()
       const data = res || {}
       setSName(data.name || '')
@@ -1841,10 +1865,32 @@ export function AdminProfileScreen() {
       setSEmail(data.email || '')
       setSWebsite(data.website || '')
       setSImageUrl(data.imageUrl || '')
+      setSLat(data.latitude != null ? data.latitude.toString() : '')
+      setSLng(data.longitude != null ? data.longitude.toString() : '')
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDetectLocation() {
+    try {
+      setLocating(true)
+      let { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert(t('schools.err_title', 'Erreur'), 'Permission d\'accès à la géolocalisation refusée.')
+        return
+      }
+      let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      setSLat(loc.coords.latitude.toFixed(6).toString())
+      setSLng(loc.coords.longitude.toFixed(6).toString())
+      Alert.alert(t('schools.success_title', 'Succès'), 'Position GPS de l\'auto-école détectée avec succès !')
+    } catch (err) {
+      console.error(err)
+      Alert.alert(t('schools.err_title', 'Erreur'), 'Impossible de récupérer la position GPS actuelle.')
+    } finally {
+      setLocating(false)
     }
   }
 
@@ -1861,6 +1907,8 @@ export function AdminProfileScreen() {
         email: sEmail,
         website: sWebsite,
         imageUrl: sImageUrl,
+        latitude: sLat !== '' ? parseFloat(sLat) : null,
+        longitude: sLng !== '' ? parseFloat(sLng) : null,
       })
       Alert.alert(t('schools.success_title', 'Succès'), t('admin_profile.success_updated'))
       setModalVisible(false)
@@ -1975,6 +2023,47 @@ export function AdminProfileScreen() {
 
               <Text style={styles.label}>{t('admin_profile.website_label')}</Text>
               <TextInput value={sWebsite} onChangeText={setSWebsite} style={styles.input} keyboardType="url" />
+
+              {/* Localisation GPS de l'auto-école */}
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 8 }}>
+                <Text style={[styles.label, { color: themeColors.primary, fontWeight: '700', marginBottom: 6 }]}>
+                  📍 Localisation GPS de l'auto-école
+                </Text>
+                <TouchableOpacity
+                  onPress={handleDetectLocation}
+                  disabled={locating}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: themeColors.primary,
+                    paddingVertical: 10,
+                    paddingHorizontal: 16,
+                    borderRadius: 6,
+                    marginBottom: 12,
+                  }}
+                >
+                  {locating ? (
+                    <ActivityIndicator color="#FFF" style={{ marginRight: 8 }} />
+                  ) : (
+                    <Ionicons name="location-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 13 }}>
+                    {locating ? 'Détection GPS en cours...' : 'Détecter ma position GPS'}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1, marginRight: 6 }}>
+                    <Text style={styles.label}>Latitude</Text>
+                    <TextInput value={sLat} onChangeText={setSLat} style={styles.input} keyboardType="numeric" placeholder="ex: 3.8520" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 6 }}>
+                    <Text style={styles.label}>Longitude</Text>
+                    <TextInput value={sLng} onChangeText={setSLng} style={styles.input} keyboardType="numeric" placeholder="ex: 11.5210" />
+                  </View>
+                </View>
+              </View>
 
               <TouchableOpacity onPress={handleSaveSchool} style={[styles.actionBtn, { width: '100%', marginTop: 20, opacity: saving ? 0.7 : 1 }]} disabled={saving}>
                 <Text style={styles.actionBtnText}>{saving ? t('admin_profile.btn_saving') : t('admin_profile.btn_save')}</Text>

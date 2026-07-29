@@ -8,8 +8,9 @@ import {
   Linking,
   Platform,
 } from 'react-native'
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps'
+import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
+import OSMMapPicker from '../ui/OSMMapPicker'
 import { useTheme } from '../../context/ThemeContext'
 import { Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { formatDate } from '../../utils/formatters'
@@ -61,24 +62,11 @@ export default function SessionLocationModal({ visible, onClose, session }) {
 
         {/* Map View showing the meeting location */}
         <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
+          <OSMMapPicker
+            latitude={latitude}
+            longitude={longitude}
             style={styles.map}
-            provider={PROVIDER_DEFAULT}
-            initialRegion={region}
-            showsUserLocation={true}
-            showsCompass={true}
-          >
-            <Marker
-              coordinate={{ latitude, longitude }}
-              title="Point de RDV"
-              description={session?.meetingPoint || 'Lieu prévu pour la séance'}
-            >
-              <View style={styles.markerContainer}>
-                <Ionicons name="location" size={26} color="#FFFFFF" />
-              </View>
-            </Marker>
-          </MapView>
+          />
 
           <View style={styles.locationBadgeBanner}>
             <Ionicons name="information-circle-outline" size={20} color="#4F46E5" style={{ marginRight: 8 }} />

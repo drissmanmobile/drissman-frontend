@@ -1,4 +1,5 @@
 // src/services/services.js
+import { Platform } from 'react-native'
 import api from './api'
 import * as SecureStore from 'expo-secure-store'
 
@@ -26,9 +27,9 @@ export async function getInstructorSchedule(instructorId) {
   try {
     const res = await api.get('/api/monitors/me/sessions')
     if (res && res.length > 0) return res
-    return mockInstructorScheduleSessions
+    return []
   } catch (e) {
-    return mockInstructorScheduleSessions
+    return []
   }
 }
 
@@ -86,9 +87,9 @@ export async function getSessionStudents(sessionId, offerId = null, offerName = 
       )
       if (filtered.length > 0) return filtered
     }
-    return allStudents.length > 0 ? allStudents : mockMonitorStudents
+    return allStudents
   } catch (e) {
-    return mockMonitorStudents
+    return []
   }
 }
 
@@ -240,36 +241,56 @@ export async function getModuleDocuments(moduleId) {
 }
 
 export async function getSchoolDocuments(schoolId) {
-  return api.get('/api/documents/school')
+  const docs = await api.get('/api/documents/school')
+  return Array.isArray(docs) ? docs.map(resolveFileUrl) : []
 }
 
 export async function getMyDocuments() {
-  return api.get('/api/documents/me')
+  const docs = await api.get('/api/documents/me')
+  return Array.isArray(docs) ? docs.map(resolveFileUrl) : []
 }
 
 export async function uploadDocument(fileUri, fileName, mimeType, uploaderId, moduleId, sessionId, schoolId, offerId, category = 'Administratif') {
+  const safeName = fileName || 'document.pdf';
+  const safeType = mimeType || 'application/pdf';
+  const formattedUri = Platform.OS === 'android' && !fileUri.startsWith('file://') && !fileUri.startsWith('content://') 
+    ? `file://${fileUri}` 
+    : fileUri;
+
   const formData = new FormData();
   formData.append('file', {
-    uri: fileUri,
-    name: fileName,
-    type: mimeType || 'application/pdf',
+    uri: formattedUri,
+    name: safeName,
+    type: safeType,
   });
-  formData.append('category', category);
+  formData.append('category', category || 'Administratif');
+  if (moduleId) formData.append('moduleId', moduleId);
+  if (sessionId) formData.append('sessionId', sessionId);
+  if (schoolId) formData.append('schoolId', schoolId);
 
   const token = await SecureStore.getItemAsync('auth_token');
   
-  return fetch(`${api.defaults.baseURL}/api/documents`, {
+  const res = await fetch(`${api.defaults.baseURL}/api/documents`, {
     method: 'POST',
     body: formData,
     headers: {
       'Authorization': `Bearer ${token}`
     }
-  })
-  .then(res => {
-    if (!res.ok) throw new Error('Upload failed');
-    return res.json();
-  })
-  .then(res => resolveFileUrl(res));
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    let message = errorText;
+    try {
+      const parsed = JSON.parse(errorText);
+      message = parsed.error || parsed.message || errorText;
+    } catch (_) {}
+    console.error(`[UploadDocument] HTTP ${res.status}:`, message);
+    throw new Error(message || `Upload failed with status ${res.status}`);
+  }
+
+  const json = await res.json();
+  return resolveFileUrl(json);
 }
 
 // Images (Avatar)

@@ -28,7 +28,7 @@ export default function StudentDetailScreen() {
     phone: student?.phone || 'Non renseigné',
     email: student?.email || 'Non renseigné',
     status: student?.status || 'ACTIVE',
-    offerName: student?.offerName || 'Permis de conduire',
+    offerName: student?.offerName || 'Non assignée',
     hoursPurchased: student?.hoursPurchased || student?.hours || 0,
     hoursConsumed: student?.hoursConsumed || 0,
     pendingLessons: student?.pendingLessons !== undefined ? student?.pendingLessons : 0,

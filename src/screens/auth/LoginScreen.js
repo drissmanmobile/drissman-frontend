@@ -26,7 +26,7 @@ export default function LoginScreen({ navigation }) {
   const { Colors: themeColors } = useTheme();
   const styles = getStyles(themeColors);
   const { t } = useTranslation()
-  const { login, loginWithGoogle } = useAuth()
+  const { login, loginWithGoogle, isOffline } = useAuth()
   const [serverError, setServerError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -92,6 +92,15 @@ export default function LoginScreen({ navigation }) {
 
         {/* Formulaire */}
         <View style={styles.form}>
+
+          {isOffline && (
+            <View style={styles.offlineBox}>
+              <Ionicons name="cloud-offline-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
+              <Text style={styles.offlineText}>
+                Mode Hors-Ligne : Connexion via le profil enregistré sur cet appareil
+              </Text>
+            </View>
+          )}
 
           {/* Email / Username */}
           <View style={styles.field}>
@@ -276,6 +285,17 @@ const getStyles = (themeColors) => StyleSheet.create({
     marginBottom: 12,
   },
   serverErrorText: { color: themeColors.error, fontSize: 13 },
+  offlineBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
+  offlineText: { color: '#92400E', fontSize: 13, flex: 1, fontWeight: '500' },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',

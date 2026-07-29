@@ -48,7 +48,9 @@ export default function StudentDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
-        setLoading(true)
+        if (!enrollmentsList.length && !sessions.length) {
+          setLoading(true)
+        }
         try {
           const [enrollments, payments, studentSessions] = await Promise.all([
             getStudentEnrollments(),
@@ -78,7 +80,7 @@ export default function StudentDashboardScreen() {
       if (user) {
         fetchData()
       }
-    }, [user])
+    }, [user?.id])
   )
 
   const handleTilePress = (route) => {

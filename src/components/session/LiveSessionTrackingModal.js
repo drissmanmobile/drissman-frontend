@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native'
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps'
+import MapView, { Marker, Polyline, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../../context/ThemeContext'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
@@ -141,10 +141,17 @@ export default function LiveSessionTrackingModal({ visible, onClose, session, is
                 ref={mapRef}
                 style={styles.map}
                 provider={PROVIDER_DEFAULT}
+                mapType="standard"
                 initialRegion={initialRegion}
                 showsUserLocation={true}
                 showsCompass={true}
               >
+                <UrlTile
+                  urlTemplate="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+                  maximumZ={19}
+                  tileSize={256}
+                  flipY={false}
+                />
                 {/* Polyline Route Trail */}
                 {trail.length > 1 && (
                   <Polyline

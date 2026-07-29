@@ -18,7 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../utils/theme'
 import { Modal, EmptyState, Badge } from '../../components/ui/index'
+import * as WebBrowser from 'expo-web-browser'
 import * as DocumentPicker from 'expo-document-picker'
+import api from '../../services/api'
 import { getAdminModules, getModuleDocuments, uploadDocument, createAdminModule, updateAdminModule, deleteAdminModule, getAdminOffers, setOfferModules, getOfferModules } from '../../services/services'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -110,7 +112,8 @@ export default function AdminModulesScreen({ navigation }) {
         file.mimeType,
         user.id,
         selectedModuleDocs.id,
-        null // sessionId is null since it's a module
+        null, // sessionId is null since it's a module
+        user?.schoolId
       )
       
       Alert.alert(t('schools.success_title'), t('admin_modules.success_upload'))
@@ -342,7 +345,15 @@ export default function AdminModulesScreen({ navigation }) {
                   <TouchableOpacity
                     key={idx}
                     style={styles.docItem}
-                    onPress={() => Linking.openURL(doc.fileUrl)}
+                    onPress={async () => {
+                      if (!doc.fileUrl) return;
+                      const fullUrl = doc.fileUrl.startsWith('/') ? `${api.defaults.baseURL}${doc.fileUrl}` : doc.fileUrl;
+                      try {
+                        await WebBrowser.openBrowserAsync(fullUrl);
+                      } catch (_) {
+                        Linking.openURL(fullUrl).catch(err => console.error("Couldn't load page", err));
+                      }
+                    }}
                   >
                     <Ionicons name="document-text-outline" size={24} color={themeColors.textSecondary} style={styles.docIcon} />
                     <View style={styles.docInfo}>

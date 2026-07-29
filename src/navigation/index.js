@@ -278,7 +278,7 @@ function AppTabs({ role, colors }) {
 export default function AppNavigator() {
   const { Colors: themeColors } = useTheme();
   const styles = getStyles(themeColors, { bottom: 0 }); // Fallback for loading state where insets might not matter
-  const { isAuthenticated, user, loading } = useAuth()
+  const { isAuthenticated, user, loading, isOffline } = useAuth()
   usePushNotifications(isAuthenticated)
 
   if (loading) {
@@ -292,6 +292,14 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <SideMenu />
+      {isAuthenticated && isOffline && (
+        <View style={styles.topOfflineBanner}>
+          <Ionicons name="cloud-offline" size={14} color="#FFFFFF" />
+          <Text style={styles.topOfflineBannerText}>
+            Mode Hors-Ligne (Accès aux données en cache)
+          </Text>
+        </View>
+      )}
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           // Auth Stack
@@ -396,4 +404,18 @@ const getStyles = (themeColors, insets = { bottom: 0 }) => StyleSheet.create({
     paddingTop: 6,
   },
   tabLabel: { fontSize: 10, fontWeight: '600' },
+  topOfflineBanner: {
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  topOfflineBannerText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 })

@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, Image, Alert, Switch, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
+import * as WebBrowser from 'expo-web-browser'
+import api from '../../services/api'
 import { getStudentSessions, getSessionDocuments, uploadImage } from '../../services/services'
 import { updateProfile } from '../../services/auth.service'
 import * as ImagePicker from 'expo-image-picker'
@@ -130,7 +132,15 @@ function StudentPlanningScreen() {
               <TouchableOpacity
                 key={idx}
                 style={styles.docItem}
-                onPress={() => Linking.openURL(doc.fileUrl)}
+                onPress={async () => {
+                  if (!doc.fileUrl) return;
+                  const fullUrl = doc.fileUrl.startsWith('/') ? `${api.defaults.baseURL}${doc.fileUrl}` : doc.fileUrl;
+                  try {
+                    await WebBrowser.openBrowserAsync(fullUrl);
+                  } catch (_) {
+                    Linking.openURL(fullUrl).catch(err => console.error("Couldn't load page", err));
+                  }
+                }}
               >
                 <Text style={styles.docName}><Ionicons name="document-text-outline" size={16} color={themeColors.textPrimary} /> {doc.name}</Text>
               </TouchableOpacity>
