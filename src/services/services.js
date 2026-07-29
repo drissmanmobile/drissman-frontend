@@ -21,8 +21,6 @@ export async function getStudentSessions(studentId) {
   return api.get('/api/enrollments/me/sessions')
 }
 
-import { mockMonitorStudents, mockInstructorScheduleSessions } from '../mocks/data.mock'
-
 export async function getInstructorSchedule(instructorId) {
   try {
     const res = await api.get('/api/monitors/me/sessions')
