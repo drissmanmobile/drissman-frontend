@@ -8,11 +8,17 @@ import Constants from 'expo-constants'
 import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 
-const LOCAL_LAN_IP = '10.66.131.63'
+const LOCAL_LAN_IP = '10.59.79.63'
 
-const getDynamicBaseUrl = () => {
+export const getDynamicBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL
-  if (envUrl && envUrl.trim().length > 0 && envUrl !== 'http://localhost:8080' && !envUrl.includes('drisman.yowyob.com')) {
+  if (
+    envUrl && 
+    envUrl.trim().length > 0 && 
+    !envUrl.includes('localhost') && 
+    !envUrl.includes('127.0.0.1') && 
+    !envUrl.includes('drisman.yowyob.com')
+  ) {
     return envUrl.trim()
   }
 
@@ -36,7 +42,7 @@ const getDynamicBaseUrl = () => {
   return `http://${LOCAL_LAN_IP}:8080`
 }
 
-const BASE_URL = getDynamicBaseUrl()
+export const BASE_URL = getDynamicBaseUrl()
 console.log("🔗 L'URL de l'API utilisée par l'application est :", BASE_URL)
 
 const api = axios.create({
@@ -52,12 +58,15 @@ const getCacheKey = (config) => {
 // Injecter le token JWT automatiquement et vérifier le réseau
 api.interceptors.request.use(async (config) => {
   try {
+    const activeBaseUrl = getDynamicBaseUrl()
+    config.baseURL = activeBaseUrl
+
     const token = await SecureStore.getItemAsync('auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    const targetUrl = config.baseURL || BASE_URL
+    const targetUrl = config.baseURL || activeBaseUrl
     const isLocalServer = targetUrl.includes('localhost') || 
                           targetUrl.includes('127.0.0.1') || 
                           targetUrl.includes('10.') || 
