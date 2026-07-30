@@ -16,10 +16,10 @@ export const getDynamicBaseUrl = () => {
     envUrl && 
     envUrl.trim().length > 0 && 
     !envUrl.includes('localhost') && 
-    !envUrl.includes('127.0.0.1') && 
-    !envUrl.includes('drisman.yowyob.com')
+    !envUrl.includes('127.0.0.1')
   ) {
-    return envUrl.trim()
+    const trimmed = envUrl.trim().replace(/\/$/, '')
+    return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
   }
 
   const hostUri = Constants.expoConfig?.hostUri || 
